@@ -1,0 +1,12 @@
+{
+  "name": "scatter",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter coordinator dev",
+    "dev:node": "pnpm --filter node dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

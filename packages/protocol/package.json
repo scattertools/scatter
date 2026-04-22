@@ -1,0 +1,25 @@
+{
+  "name": "@scatter/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./crypto": "./src/crypto.ts",
+    "./sharding": "./src/sharding.ts",
+    "./manifest": "./src/manifest.ts",
+    "./links": "./src/links.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

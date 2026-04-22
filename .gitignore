@@ -1,0 +1,110 @@
+# ---------- Dependencies ----------
+node_modules/
+.pnpm-store/
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---------- Build output ----------
+dist/
+build/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Next.js
+.next/
+.vercel/
+
+# Turbopack
+.turbo/
+
+# ---------- Environment & Secrets ----------
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+!.env.example
+
+# ---------- Cloudflare / Wrangler ----------
+.wrangler/
+.dev.vars
+wrangler.toml.bak
+
+# ---------- Scatter-specific ----------
+# Local waitlist data (if using the file-based API route)
+waitlist.jsonl
+
+# Local shard storage (for node app dev)
+.scatter/
+shards/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Uploaded files during testing
+uploads/
+tmp/
+
+# Generated manifests during testing
+test-manifests/
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- Testing & Coverage ----------
+coverage/
+*.lcov
+.nyc_output/
+.vitest-cache/
+playwright-report/
+test-results/
+
+# ---------- Editors & IDEs ----------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# ---------- OS ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- Misc ----------
+*.pem
+*.key
+*.crt
+*.p12
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
