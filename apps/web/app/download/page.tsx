@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { FiDownload, FiPackage, FiLoader } from 'react-icons/fi';
+import { FiDownload } from 'react-icons/fi';
 import { FaApple, FaLinux, FaWindows } from 'react-icons/fa';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
@@ -76,10 +76,31 @@ function subscribePlatform() {
   return () => {};
 }
 
-type ReleaseState =
-  | { status: 'loading' }
-  | { status: 'none' } // no published release yet (404 / no matching assets)
-  | { status: 'ready'; version: string; downloads: Downloads };
+// The current shipped version. Used to build direct-download URLs WITHOUT the
+// GitHub API, so downloads work even if the API is rate-limited (60 req/hr/IP)
+// or unreachable. Bump this when cutting a release (see RELEASE.md).
+const FALLBACK_VERSION = '0.1.0';
+
+// Tauri's bundle filenames embed the version, so we can construct stable
+// per-platform download URLs from a known version. These resolve directly off
+// the published release without any API call.
+function downloadsForVersion(version: string): Downloads {
+  const v = version.replace(/^v/, '');
+  const dl = (name: string) => ({
+    url: `https://github.com/${REPO}/releases/download/v${v}/${name}`,
+    name,
+  });
+  return {
+    mac: dl(`Scatter_${v}_aarch64.dmg`),
+    windows: dl(`Scatter_${v}_x64-setup.exe`),
+    linux: dl(`Scatter_${v}_amd64.AppImage`),
+  };
+}
+
+type ReleaseState = {
+  version: string;
+  downloads: Downloads;
+};
 
 export default function DownloadApp() {
   const detected = useSyncExternalStore<Platform>(
@@ -92,11 +113,17 @@ export default function DownloadApp() {
   const platform = override ?? detected;
   const setPlatform = setOverride;
 
-  const [release, setRelease] = useState<ReleaseState>({ status: 'loading' });
+  // Start from the known shipped version so the page ALWAYS offers working
+  // downloads, even before (or without) the API call. The fetch below only
+  // upgrades this to the live latest release + exact asset filenames.
+  const [release, setRelease] = useState<ReleaseState>({
+    version: FALLBACK_VERSION,
+    downloads: downloadsForVersion(FALLBACK_VERSION),
+  });
 
-  // Fetch the latest GitHub release on mount and derive per-platform asset
-  // URLs. Done client-side so a new release is picked up without redeploying
-  // the site (no build-time caching of the release list).
+  // Fetch the latest GitHub release on mount to pick up newer versions without
+  // redeploying the site. On any failure (404 / rate limit / network) we keep
+  // the FALLBACK_VERSION links, which still work.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -104,22 +131,21 @@ export default function DownloadApp() {
         const res = await fetch(LATEST_API, {
           headers: { Accept: 'application/vnd.github+json' },
         });
-        // 404 = no published (non-draft, non-prerelease) release yet.
-        if (!res.ok) {
-          if (!cancelled) setRelease({ status: 'none' });
-          return;
-        }
+        if (!res.ok) return; // keep fallback
         const data: LatestRelease = await res.json();
-        const downloads = resolveDownloads(data.assets ?? []);
-        const hasAny = Object.values(downloads).some(Boolean);
+        const resolved = resolveDownloads(data.assets ?? []);
+        // Prefer exact asset URLs from the API; fall back to constructed URLs
+        // for any platform the release happens not to include.
+        const constructed = downloadsForVersion(data.tag_name);
+        const downloads: Downloads = {
+          mac: resolved.mac ?? constructed.mac,
+          windows: resolved.windows ?? constructed.windows,
+          linux: resolved.linux ?? constructed.linux,
+        };
         if (cancelled) return;
-        setRelease(
-          hasAny
-            ? { status: 'ready', version: data.tag_name, downloads }
-            : { status: 'none' },
-        );
+        setRelease({ version: data.tag_name, downloads });
       } catch {
-        if (!cancelled) setRelease({ status: 'none' });
+        // keep fallback
       }
     })();
     return () => {
@@ -127,7 +153,7 @@ export default function DownloadApp() {
     };
   }, []);
 
-  const current = release.status === 'ready' ? release.downloads[platform] : null;
+  const current = release.downloads[platform];
 
   return (
     <main className="page-wrapper bg-scatter-bg text-scatter-text">
@@ -137,9 +163,7 @@ export default function DownloadApp() {
         <div className="mb-8">
           <p className="text-scatter-muted font-mono text-sm mb-2">
             {'// node app'}
-            {release.status === 'ready' && (
-              <span className="ml-2 text-scatter-text">{release.version}</span>
-            )}
+            <span className="ml-2 text-scatter-text">{release.version}</span>
           </p>
           <h1 className="text-5xl font-black tracking-tight mb-3">
             run a scatter node.
@@ -149,28 +173,6 @@ export default function DownloadApp() {
             help build a better internet.
           </p>
         </div>
-
-        {/* Status banner — only while there is no published release yet. */}
-        {release.status === 'none' && (
-          <div className="mb-8 p-4 border-2 border-scatter-border bg-scatter-warning/10 flex items-start gap-3">
-            <FiPackage size={20} className="flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-black">in development — not released yet</p>
-              <p className="text-sm text-scatter-muted">
-                the desktop node app isn&apos;t shipped yet. when the first
-                release is published, it&apos;ll appear on the{' '}
-                <Link href={RELEASES_URL} className="underline font-semibold">
-                  releases page
-                </Link>{' '}
-                and the button below will download it. in the meantime you can{' '}
-                <Link href="/" className="underline font-semibold">
-                  share files
-                </Link>{' '}
-                right from the web.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Download buttons - PRIMARY */}
         <div className="mb-8 border-2 border-scatter-border bg-scatter-surface shadow-brutal p-6">
@@ -198,15 +200,11 @@ export default function DownloadApp() {
             />
           </div>
 
-          {/* Big download button — resolves to the real latest-release asset.
-              States: loading (disabled), ready+asset (direct download),
-              ready-but-no-asset-for-this-platform / none (link to releases). */}
-          {release.status === 'loading' ? (
-            <div className="w-full px-6 py-4 bg-scatter-bg text-scatter-muted font-bold border-2 border-scatter-border flex items-center justify-center gap-3 text-lg">
-              <FiLoader size={22} className="animate-spin" />
-              checking latest release…
-            </div>
-          ) : current ? (
+          {/* Big download button — links directly to the platform's installer
+              on the latest release. current is always set (constructed from the
+              known version, upgraded to exact asset URLs once the API responds),
+              so downloads work even if the GitHub API is rate-limited. */}
+          {current ? (
             <a
               href={current.url}
               className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-3 text-lg"
@@ -220,9 +218,7 @@ export default function DownloadApp() {
               className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-3 text-lg"
             >
               <FiDownload size={22} />
-              {release.status === 'ready'
-                ? `no ${PLATFORM_LABELS[platform]} build — see all releases`
-                : 'view releases'}
+              view releases
             </a>
           )}
 
