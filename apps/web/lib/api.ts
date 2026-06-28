@@ -133,6 +133,12 @@ export const api = {
       auth: session,
     }),
 
+  createLoginCode: (session: string) =>
+    request<{ code: string; expiresInMinutes: number }>('/auth/code', {
+      method: 'POST',
+      auth: session,
+    }),
+
   stats: () => request<NetworkStats>('/nodes/stats'),
 
   uploadPlan: (manifest: FileManifest, session?: string | null) =>

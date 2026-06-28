@@ -14,6 +14,7 @@ import {
   FiUser,
   FiLogOut,
   FiMail,
+  FiKey,
   FiCheck,
   FiSave,
   FiLoader,
@@ -517,7 +518,8 @@ function AccountView({
 }) {
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
-  const [stage, setStage] = useState<'email' | 'token'>('email');
+  const [code, setCode] = useState('');
+  const [stage, setStage] = useState<'email' | 'token' | 'code'>('email');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -579,6 +581,20 @@ function AccountView({
     }
   };
 
+  const loginWithCode = async () => {
+    if (!code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await invoke<Account>('login_with_code', { code: code.trim() });
+      onChange();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const signOut = async () => {
     setBusy(true);
     try {
@@ -587,6 +603,7 @@ function AccountView({
       setStage('email');
       setEmail('');
       setToken('');
+      setCode('');
     } finally {
       setBusy(false);
     }
@@ -727,6 +744,57 @@ function AccountView({
               >
                 <FiMail size={18} />{' '}
                 {busy ? 'sending...' : 'send sign-in link'}
+              </button>
+              <div className="flex items-center gap-2 my-3 text-xs text-scatter-muted">
+                <div className="flex-1 h-px bg-scatter-border" />
+                or
+                <div className="flex-1 h-px bg-scatter-border" />
+              </div>
+              <button
+                onClick={() => {
+                  setStage('code');
+                  setError(null);
+                }}
+                className="brutal-btn-sm w-full px-4 py-2 bg-scatter-surface border-2 border-scatter-border font-bold text-sm shadow-brutal-sm flex items-center justify-center gap-2"
+              >
+                <FiKey size={14} /> use a login code
+              </button>
+            </div>
+          ) : stage === 'code' ? (
+            <div className="p-4 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm">
+              <p className="text-sm mb-3 leading-relaxed">
+                already signed in on the web? open{' '}
+                <span className="font-bold">account settings</span> on
+                scatter.tools, generate a one-time login code, then paste it
+                here.
+              </p>
+              <label className="text-xs font-bold uppercase tracking-wider text-scatter-muted mb-2 block">
+                login code
+              </label>
+              <input
+                type="text"
+                value={code}
+                autoFocus
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loginWithCode()}
+                placeholder="XXXX-XXXX-XXXX"
+                className="w-full px-3 py-2 border-2 border-scatter-border bg-scatter-bg font-mono text-sm mb-3 outline-none focus:bg-white uppercase tracking-widest"
+              />
+              <button
+                onClick={loginWithCode}
+                disabled={busy || !code.trim()}
+                className="brutal-btn w-full px-4 py-3 bg-scatter-primary text-white border-2 border-scatter-border font-bold shadow-brutal disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {busy ? 'signing in...' : 'sign in with code'}
+              </button>
+              <button
+                onClick={() => {
+                  setStage('email');
+                  setError(null);
+                }}
+                className="brutal-link w-full mt-2 px-4 py-2 font-semibold text-sm"
+              >
+                back to email sign-in
               </button>
             </div>
           ) : (

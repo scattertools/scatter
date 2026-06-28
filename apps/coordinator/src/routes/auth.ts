@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   createMagicLink,
   consumeMagicLink,
+  createLoginCode,
+  consumeLoginCode,
   issueSession,
   getUserById,
 } from '../auth.ts';
@@ -41,6 +43,41 @@ export async function authRoutes(app: FastifyInstance) {
       const result = consumeMagicLink(body.token);
       if (!result)
         return reply.code(400).send({ error: 'invalid or expired token' });
+      const session = await issueSession(result.userId, result.email);
+      const user = getUserById(result.userId);
+      return {
+        session,
+        user: user ?? { id: result.userId, email: result.email, username: '' },
+      };
+    },
+  );
+
+  // Generate a one-time login code for the signed-in user. The code is shown
+  // in the web account settings and can be typed into the GUI app to sign in
+  // there without repeating the email magic-link flow.
+  app.post(
+    '/auth/code',
+    {
+      preHandler: app.requireAuth,
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const code = createLoginCode(req.user!.sub);
+      return { code, expiresInMinutes: env.LOGIN_CODE_TTL_MINUTES };
+    },
+  );
+
+  // Exchange a one-time login code for a session. Public (the whole point is
+  // signing in on a device that isn't authenticated yet), but rate-limited to
+  // frustrate brute-forcing the short code space.
+  app.post(
+    '/auth/code/verify',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = z.object({ code: z.string() }).parse(req.body);
+      const result = consumeLoginCode(body.code);
+      if (!result)
+        return reply.code(400).send({ error: 'invalid or expired code' });
       const session = await issueSession(result.userId, result.email);
       const user = getUserById(result.userId);
       return {

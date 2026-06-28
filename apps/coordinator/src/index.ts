@@ -70,6 +70,7 @@ await app.register(shardRoutes);
 const cleanupTimer = setInterval(() => {
   const now = Date.now();
   db.prepare(`DELETE FROM magic_links WHERE expires_at < ?`).run(now);
+  db.prepare(`DELETE FROM login_codes WHERE expires_at < ?`).run(now);
   db.prepare(
     `UPDATE files SET deleted_at = ? WHERE expires_at IS NOT NULL AND expires_at < ? AND deleted_at IS NULL`,
   ).run(now, now);

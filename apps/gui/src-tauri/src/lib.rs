@@ -453,6 +453,49 @@ async fn verify_login(state: State<'_, Arc<AppState>>, token: String) -> Result<
     Ok(account)
 }
 
+/// Alternative to the email flow: exchange a one-time login code (generated
+/// in the web account settings while signed in there) for a session, persist
+/// it, and load the account's credit balance.
+#[tauri::command]
+async fn login_with_code(
+    state: State<'_, Arc<AppState>>,
+    code: String,
+) -> Result<Account, String> {
+    let mut config = load_config();
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(format!("{}/auth/code/verify", config.coordinator))
+        .json(&serde_json::json!({ "code": code.trim() }))
+        .send()
+        .await
+        .map_err(|e| format!("could not reach coordinator: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err("invalid or expired code".to_string());
+    }
+
+    let verified = resp
+        .json::<VerifyResponse>()
+        .await
+        .map_err(|e| format!("bad response: {e}"))?;
+
+    config.session = Some(verified.session.clone());
+    save_config(&config);
+
+    let balance = fetch_balance(&client, &config.coordinator, &verified.session)
+        .await
+        .unwrap_or(0);
+
+    let account = Account {
+        email: verified.user.email,
+        username: verified.user.username,
+        balance,
+    };
+    *state.account.lock().unwrap() = Some(account.clone());
+    Ok(account)
+}
+
 /// Change the signed-in user's username via the coordinator, updating the
 /// cached account on success.
 #[tauri::command]
@@ -605,6 +648,7 @@ pub fn run() {
             get_coordinator,
             request_login,
             verify_login,
+            login_with_code,
             update_username,
             logout,
         ])

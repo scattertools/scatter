@@ -11,6 +11,7 @@ const schema = z.object({
 
   JWT_SECRET: z.string().min(32),
   MAGIC_LINK_TTL_MINUTES: z.coerce.number().default(15),
+  LOGIN_CODE_TTL_MINUTES: z.coerce.number().default(10),
   SESSION_TTL_DAYS: z.coerce.number().default(30),
 
   WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
