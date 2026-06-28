@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { FiDownload, FiPackage } from 'react-icons/fi';
 import { FaApple, FaLinux, FaWindows } from 'react-icons/fa';
@@ -26,12 +26,23 @@ const BINARIES: Record<Platform, { file: string; label: string }> = {
   windows: { file: 'scatter-windows-x64.zip', label: 'Windows (x64)' },
 };
 
-export default function DownloadApp() {
-  const [platform, setPlatform] = useState<Platform>('mac');
+// The auto-detected platform is a client-only value (navigator.userAgent), so
+// it's read via useSyncExternalStore to avoid a hydration mismatch (server
+// renders the 'mac' fallback). It never changes, so the store never re-emits.
+function subscribePlatform() {
+  return () => {};
+}
 
-  useEffect(() => {
-    setPlatform(detectPlatform());
-  }, []);
+export default function DownloadApp() {
+  const detected = useSyncExternalStore<Platform>(
+    subscribePlatform,
+    detectPlatform,
+    () => 'mac',
+  );
+  // User can override the auto-detected platform via the tabs.
+  const [override, setOverride] = useState<Platform | null>(null);
+  const platform = override ?? detected;
+  const setPlatform = setOverride;
 
   return (
     <main className="page-wrapper bg-scatter-bg text-scatter-text">
@@ -40,7 +51,7 @@ export default function DownloadApp() {
       <div className="flex-1 max-w-3xl mx-auto px-6 py-12 md:py-20 w-full">
         <div className="mb-8">
           <p className="text-scatter-muted font-mono text-sm mb-2">
-            // node app
+            {'// node app'}
           </p>
           <h1 className="text-5xl font-black tracking-tight mb-3">
             run a scatter node.
@@ -147,7 +158,7 @@ export default function DownloadApp() {
         <h2 className="text-2xl font-black mb-4">quick questions</h2>
         <div className="space-y-3">
           <Faq q="what does my computer actually store?">
-            encrypted chunks of other people's files. you can't read them — only
+            encrypted chunks of other people&apos;s files. you can&apos;t read them — only
             the person with the share link can decrypt anything.
           </Faq>
           <Faq q="how much bandwidth does it use?">

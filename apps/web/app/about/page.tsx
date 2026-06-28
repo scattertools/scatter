@@ -8,24 +8,24 @@ export default function About() {
       <Nav />
 
       <article className="max-w-2xl mx-auto px-6 py-12 md:py-20">
-        <p className="text-scatter-muted font-mono text-sm mb-2">// about</p>
+        <p className="text-scatter-muted font-mono text-sm mb-2">{'// about'}</p>
         <h1 className="text-5xl font-black tracking-tight mb-4">
           how scatter works.
         </h1>
         <p className="text-xl text-scatter-muted mb-12 font-medium">
-          file sharing that doesn't trust a company — including us.
+          file sharing that doesn&apos;t trust a company — including us.
         </p>
 
         <Section title="the problem">
           <p>
             when you upload a file to dropbox, google drive, or wetransfer,
-            you're trusting that company with your data. they can read it, scan
+            you&apos;re trusting that company with your data. they can read it, scan
             it, lose it, or hand it over to whoever asks.
           </p>
           <p>
             scatter was built on a simple idea:{' '}
             <strong>
-              what if the service couldn't read your files, even if it wanted
+              what if the service couldn&apos;t read your files, even if it wanted
               to?
             </strong>
           </p>
@@ -52,7 +52,7 @@ export default function About() {
                 scatter.tools/f/abc123#key
               </code>
               . the part after the <code>#</code> — the decryption key — is
-              never sent to our server. browsers don't send it.
+              never sent to our server. browsers don&apos;t send it.
             </Step>
           </ol>
         </Section>
@@ -65,11 +65,11 @@ export default function About() {
             <li>when the file was created</li>
           </ul>
           <p className="mt-4">
-            things we <strong>can't</strong> see:
+            things we <strong>can&apos;t</strong> see:
           </p>
           <ul className="list-disc ml-6 space-y-1 text-scatter-muted">
             <li>the contents of the file</li>
-            <li>the original filename (it's encrypted with everything else)</li>
+            <li>the original filename (it&apos;s encrypted with everything else)</li>
             <li>who downloaded it</li>
           </ul>
         </Section>

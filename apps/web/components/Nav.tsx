@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth-context';
 import { FaGithub } from 'react-icons/fa';
 import { FiUser, FiSettings } from 'react-icons/fi';
@@ -12,7 +13,7 @@ export default function Nav() {
     <nav className="border-b-2 border-scatter-border">
       <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
-          <img src="/logo.svg" alt="Scatter" className="w-8 h-8" />
+          <Image src="/logo.svg" alt="Scatter" width={32} height={32} className="w-8 h-8" />
           <span className="text-xl font-black tracking-tight">Scatter</span>
         </Link>
         <div className="flex items-center gap-3">

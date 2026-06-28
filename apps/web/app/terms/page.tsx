@@ -8,7 +8,7 @@ export default function Terms() {
       <Nav />
 
       <article className="max-w-2xl mx-auto px-6 py-12 md:py-20">
-        <p className="text-scatter-muted font-mono text-sm mb-2">// terms</p>
+        <p className="text-scatter-muted font-mono text-sm mb-2">{'// terms'}</p>
         <h1 className="text-5xl font-black tracking-tight mb-4">
           terms of use.
         </h1>
@@ -19,8 +19,8 @@ export default function Terms() {
         <div className="p-4 border-2 border-scatter-border bg-scatter-warning/10 mb-10">
           <p className="font-bold mb-1">plain english:</p>
           <p className="text-sm text-scatter-muted">
-            don't use scatter for illegal stuff, don't break the network on
-            purpose, and understand that it's an open-source project without
+            don&apos;t use scatter for illegal stuff, don&apos;t break the network on
+            purpose, and understand that it&apos;s an open-source project without
             warranties. full text below.
           </p>
         </div>
@@ -47,38 +47,38 @@ export default function Terms() {
             <li>try to de-anonymize other users</li>
           </ul>
           <p>
-            if we're notified of abuse on the hosted scatter.tools service,
-            we'll delete the file from our coordinator's records — which
-            effectively breaks reassembly. we can't see content, but we can
+            if we&apos;re notified of abuse on the hosted scatter.tools service,
+            we&apos;ll delete the file from our coordinator&apos;s records — which
+            effectively breaks reassembly. we can&apos;t see content, but we can
             respond to reports about specific file ids.
           </p>
         </Section>
 
         <Section title="running a node">
           <p>
-            nodes hold encrypted shards on behalf of the network. you don't host
-            "files" in any meaningful sense — you host opaque encrypted blobs
-            that can't be read, categorized, or reconstructed on your machine
+            nodes hold encrypted shards on behalf of the network. you don&apos;t host
+            &quot;files&quot; in any meaningful sense — you host opaque encrypted blobs
+            that can&apos;t be read, categorized, or reconstructed on your machine
             alone.
           </p>
           <p>
             you can leave the network at any time. the 10-of-14 erasure coding
-            means your departure doesn't break anyone's files.
+            means your departure doesn&apos;t break anyone&apos;s files.
           </p>
         </Section>
 
         <Section title="credits">
           <p>
             credits are an internal accounting system, not currency. they have
-            no cash value, can't be transferred, and may be adjusted or reset if
+            no cash value, can&apos;t be transferred, and may be adjusted or reset if
             we find bugs in the earning system.
           </p>
         </Section>
 
         <Section title="no warranty">
           <p>
-            scatter is provided "as is" without warranty of any kind. we do our
-            best to keep files available, but we can't guarantee it. don't use
+            scatter is provided &quot;as is&quot; without warranty of any kind. we do our
+            best to keep files available, but we can&apos;t guarantee it. don&apos;t use
             scatter as your only backup.
           </p>
           <p>
@@ -102,7 +102,7 @@ export default function Terms() {
 
         <Section title="changes">
           <p>
-            if we update these terms, we'll change the date above. continued use
+            if we update these terms, we&apos;ll change the date above. continued use
             after changes means you accept them.
           </p>
         </Section>

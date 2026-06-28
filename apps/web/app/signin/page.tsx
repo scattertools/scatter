@@ -37,7 +37,7 @@ export default function SignIn() {
             sign in
           </h1>
           <p className="text-scatter-muted text-center mb-8">
-            we'll email you a link. no password needed.
+            we&apos;ll email you a link. no password needed.
           </p>
 
           <div className="border-2 border-scatter-border bg-scatter-surface shadow-brutal p-6">

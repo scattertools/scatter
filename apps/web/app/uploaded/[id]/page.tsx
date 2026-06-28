@@ -1,10 +1,43 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useState, useSyncExternalStore, use } from 'react';
 import Link from 'next/link';
 import { FiCopy, FiCheck, FiArrowLeft, FiExternalLink, FiAlertTriangle } from 'react-icons/fi';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+
+interface UploadInfo {
+  link: string;
+  fileName: string;
+  fileSize: number;
+}
+
+// Stored once right after upload; never changes for this page, so the store
+// never re-emits. useSyncExternalStore reads the client-only sessionStorage
+// value without a hydration mismatch (server renders the "not loaded" state).
+function noopSubscribe() {
+  return () => {};
+}
+
+// Cache the parsed snapshot per id so getSnapshot returns a stable reference
+// (useSyncExternalStore compares by identity and would loop otherwise).
+const infoCache = new Map<string, UploadInfo | null>();
+
+function readUploadInfo(id: string): UploadInfo | null {
+  if (infoCache.has(id)) return infoCache.get(id)!;
+  let parsed: UploadInfo | null = null;
+  const raw = sessionStorage.getItem(`scatter.upload.${id}`);
+  if (raw) {
+    try {
+      parsed = JSON.parse(raw) as UploadInfo;
+    } catch {
+      // Corrupt entry — treat as if there's no info and show recovery UI.
+      parsed = null;
+    }
+  }
+  infoCache.set(id, parsed);
+  return parsed;
+}
 
 export default function Uploaded({
   params,
@@ -12,26 +45,18 @@ export default function Uploaded({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [info, setInfo] = useState<{
-    link: string;
-    fileName: string;
-    fileSize: number;
-  } | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem(`scatter.upload.${id}`);
-    if (raw) {
-      try {
-        setInfo(JSON.parse(raw));
-      } catch {
-        // Corrupt entry — treat as if there's no info and show recovery UI.
-        setInfo(null);
-      }
-    }
-    setLoaded(true);
-  }, [id]);
+  const info = useSyncExternalStore<UploadInfo | null>(
+    noopSubscribe,
+    () => readUploadInfo(id),
+    () => null,
+  );
+  const loaded = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+  const [copied, setCopied] = useState(false);
 
   const copy = () => {
     if (!info) return;

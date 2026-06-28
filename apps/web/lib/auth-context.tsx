@@ -3,11 +3,17 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
+  useCallback,
+  useSyncExternalStore,
   ReactNode,
 } from 'react';
-import { loadSession, saveSession, clearSession } from './session';
+import {
+  saveSession,
+  clearSession,
+  subscribeSession,
+  getSessionSnapshot,
+  getServerSessionSnapshot,
+} from './session';
 import type { User } from './api';
 
 interface AuthContextValue {
@@ -22,35 +28,36 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const stored = useSyncExternalStore(
+    subscribeSession,
+    getSessionSnapshot,
+    getServerSessionSnapshot,
+  );
+  // On the server we have no storage to read, so we're never "ready"; once the
+  // client subscription is established useSyncExternalStore returns true.
+  const ready = useSyncExternalStore(
+    subscribeSession,
+    () => true,
+    () => false,
+  );
 
-  useEffect(() => {
-    const stored = loadSession();
-    if (stored) {
-      setUser(stored.user);
-      setSession(stored.token);
-    }
-    setReady(true);
+  const user = stored?.user ?? null;
+  const session = stored?.token ?? null;
+
+  const signIn = useCallback((token: string, u: User) => {
+    saveSession(token, u);
   }, []);
 
-  const signIn = (token: string, u: User) => {
-    saveSession(token, u);
-    setSession(token);
-    setUser(u);
-  };
+  const updateUser = useCallback(
+    (u: User) => {
+      if (session) saveSession(session, u);
+    },
+    [session],
+  );
 
-  const updateUser = (u: User) => {
-    setUser(u);
-    if (session) saveSession(session, u);
-  };
-
-  const signOut = () => {
+  const signOut = useCallback(() => {
     clearSession();
-    setSession(null);
-    setUser(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider

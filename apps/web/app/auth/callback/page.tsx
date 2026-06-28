@@ -12,19 +12,17 @@ function CallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { signIn } = useAuth();
+  const token = params.get('token');
   const [status, setStatus] = useState<'init' | 'loading' | 'ok' | 'error'>(
-    'init',
+    token ? 'loading' : 'error',
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    token ? null : 'missing token',
+  );
   const verifiedToken = useRef<string | null>(null);
 
   useEffect(() => {
-    const token = params.get('token');
-    if (!token) {
-      setStatus('error');
-      setError('missing token');
-      return;
-    }
+    if (!token) return;
 
     // Magic-link tokens are single-use: the coordinator marks them consumed on
     // first verify. Guard against React running this effect twice (StrictMode /
@@ -32,8 +30,6 @@ function CallbackInner() {
     // clobber the success state with a spurious error.
     if (verifiedToken.current === token) return;
     verifiedToken.current = token;
-
-    setStatus('loading');
 
     api
       .verifyMagicLink(token)
@@ -46,7 +42,7 @@ function CallbackInner() {
         setStatus('error');
         setError(e instanceof ApiError ? e.message : 'verification failed');
       });
-  }, [params, router, signIn]);
+  }, [token, router, signIn]);
 
   return (
     <div className="max-w-md w-full text-center">
@@ -70,7 +66,7 @@ function CallbackInner() {
         {status === 'error' && (
           <>
             <FiX size={48} className="mx-auto mb-4 text-scatter-danger" />
-            <p className="font-bold">couldn't sign you in</p>
+            <p className="font-bold">couldn&apos;t sign you in</p>
             <p className="text-scatter-muted text-sm mt-2">{error}</p>
           </>
         )}

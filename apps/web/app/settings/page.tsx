@@ -42,7 +42,7 @@ export default function Settings() {
       <div className="flex-1 max-w-2xl mx-auto px-6 py-12 w-full">
         <div className="mb-8">
           <p className="text-scatter-muted font-mono text-sm mb-1">
-            // settings
+            {'// settings'}
           </p>
           <h1 className="text-4xl font-black tracking-tight">
             account settings
@@ -59,7 +59,7 @@ export default function Settings() {
           </div>
           <span className="font-mono font-bold truncate">{user.email}</span>
           <p className="text-xs text-scatter-muted mt-2">
-            your email is used to sign in and can't be changed.
+            your email is used to sign in and can&apos;t be changed.
           </p>
         </div>
       </div>

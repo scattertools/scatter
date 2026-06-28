@@ -9,7 +9,7 @@ export default function NotFound() {
 
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="max-w-md text-center">
-          <p className="text-scatter-muted font-mono text-sm mb-2">// 404</p>
+          <p className="text-scatter-muted font-mono text-sm mb-2">{'// 404'}</p>
           <h1 className="text-7xl font-black tracking-tight mb-4">
             scattered.
           </h1>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -25,38 +25,57 @@ export default function Dashboard() {
   const router = useRouter();
   const [files, setFiles] = useState<UserFile[]>([]);
   const [credits, setCredits] = useState<Credits | null>(null);
-  const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [links, setLinks] = useState<Record<string, string>>({});
+  const [renderedAt, setRenderedAt] = useState(0);
+  // The session whose data is currently loaded; while it lags `session` we're
+  // still fetching. Deriving `loading` this way avoids a synchronous setState
+  // inside the effect.
+  // The (session, reloadKey) pair whose data is currently loaded; while it lags
+  // the live pair we're still fetching. Deriving `loading` this way avoids a
+  // synchronous setState inside the effect.
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const currentKey = session ? `${session}:${reloadKey}` : null;
+  const loading = !!session && loadedKey !== currentKey;
 
   useEffect(() => {
     if (ready && !user) router.push('/signin');
   }, [ready, user, router]);
 
   useEffect(() => {
-    if (!session) return;
-    setLoading(true);
-    setLoadError(null);
+    if (!session || !currentKey) return;
+    let active = true;
     Promise.all([api.listFiles(session), api.getCredits(session)])
       .then(([f, c]) => {
+        if (!active) return;
         setFiles(f.files);
         setCredits(c);
+        setLoadError(null);
+        setRenderedAt(Date.now());
       })
       .catch((e) => {
+        if (!active) return;
         setLoadError(
           e instanceof Error ? e.message : 'Failed to load your files.',
         );
       })
-      .finally(() => setLoading(false));
-  }, [session]);
+      .finally(() => {
+        if (active) setLoadedKey(currentKey);
+      });
+    return () => {
+      active = false;
+    };
+  }, [session, currentKey]);
 
   // Load any locally-stored share links (which include the #key fragment).
-  // The key is never on the server, so this is the only source for a working link.
-  useEffect(() => {
-    if (files.length === 0) return;
+  // The key is never on the server, so this is the only source for a working
+  // link. `files` only populates after the client-side fetch (post-hydration),
+  // so reading localStorage here can't cause a hydration mismatch.
+  const links = useMemo<Record<string, string>>(() => {
     const map: Record<string, string> = {};
+    if (typeof window === 'undefined') return map;
     for (const file of files) {
       try {
         const link = localStorage.getItem(`scatter.links.${file.id}`);
@@ -65,7 +84,7 @@ export default function Dashboard() {
         // localStorage unavailable — leave links absent (copy disabled).
       }
     }
-    setLinks(map);
+    return map;
   }, [files]);
 
   const copyLink = (fileId: string) => {
@@ -107,7 +126,7 @@ export default function Dashboard() {
       <div className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
         <div className="mb-8">
           <p className="text-scatter-muted font-mono text-sm mb-1">
-            // dashboard
+            {'// dashboard'}
           </p>
           <h1 className="text-4xl font-black tracking-tight">
             welcome back,{' '}
@@ -192,24 +211,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => {
                     if (!session) return;
-                    setLoading(true);
                     setLoadError(null);
-                    Promise.all([
-                      api.listFiles(session),
-                      api.getCredits(session),
-                    ])
-                      .then(([f, c]) => {
-                        setFiles(f.files);
-                        setCredits(c);
-                      })
-                      .catch((e) => {
-                        setLoadError(
-                          e instanceof Error
-                            ? e.message
-                            : 'Failed to load your files.',
-                        );
-                      })
-                      .finally(() => setLoading(false));
+                    setReloadKey((k) => k + 1);
                   }}
                   className="brutal-btn-sm mt-3 px-4 py-2 bg-scatter-text text-scatter-bg font-bold border-2 border-scatter-border shadow-brutal-sm"
                 >
@@ -234,6 +237,7 @@ export default function Dashboard() {
                 <FileRow
                   key={file.id}
                   file={file}
+                  now={renderedAt}
                   onCopy={() => copyLink(file.id)}
                   onDelete={() => deleteFile(file.id)}
                   copied={copiedId === file.id}
@@ -311,6 +315,7 @@ function DashStat({
 
 function FileRow({
   file,
+  now,
   onCopy,
   onDelete,
   copied,
@@ -318,13 +323,14 @@ function FileRow({
   hasLink,
 }: {
   file: UserFile;
+  now: number;
   onCopy: () => void;
   onDelete: () => void;
   copied: boolean;
   deleting: boolean;
   hasLink: boolean;
 }) {
-  const isExpiring = file.expiresAt && file.expiresAt < Date.now() + 3600_000;
+  const isExpiring = file.expiresAt && file.expiresAt < now + 3600_000;
 
   return (
     <div className="p-4 flex items-center gap-4">

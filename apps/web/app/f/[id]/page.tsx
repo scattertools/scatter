@@ -33,24 +33,27 @@ export default function DownloadPage({
   } | null>(null);
 
   useEffect(() => {
+    let active = true;
     const keyFragment =
       typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
-    if (!keyFragment) {
-      setState('error');
-      setError(
-        'This link is missing the decryption key. Make sure the full URL was copied.',
-      );
-      return;
-    }
 
-    api
-      .downloadPlan(id)
+    const load = keyFragment
+      ? api.downloadPlan(id)
+      : Promise.reject(
+          new Error(
+            'This link is missing the decryption key. Make sure the full URL was copied.',
+          ),
+        );
+
+    load
       .then((p) => {
+        if (!active) return;
         setPlan(p);
         setManifest(p.manifest as FileManifest);
         setState('ready');
       })
       .catch((e) => {
+        if (!active) return;
         setState('error');
         setError(
           e instanceof ApiError
@@ -59,9 +62,15 @@ export default function DownloadPage({
               : e.status === 410
                 ? 'This file has expired.'
                 : e.message
-            : "Couldn't load this file",
+            : e instanceof Error
+              ? e.message
+              : "Couldn't load this file",
         );
       });
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   const handleDownload = async () => {
@@ -114,7 +123,7 @@ export default function DownloadPage({
                 size={48}
                 className="mx-auto mb-4 text-scatter-danger"
               />
-              <h1 className="text-2xl font-black mb-2">can't open this file</h1>
+              <h1 className="text-2xl font-black mb-2">can&apos;t open this file</h1>
               <p className="text-scatter-muted mb-6">{error}</p>
               <Link
                 href="/"
@@ -233,7 +242,7 @@ export default function DownloadPage({
                 {/* Info footer */}
                 <div className="mt-4 p-4 border-2 border-scatter-border bg-scatter-surface text-center text-sm text-scatter-muted">
                   <p>
-                    the decryption key is in your URL — we can't read this file.{' '}
+                    the decryption key is in your URL — we can&apos;t read this file.{' '}
                     <Link
                       href="/about"
                       className="brutal-link underline font-semibold"

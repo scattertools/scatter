@@ -8,7 +8,7 @@ export default function Privacy() {
       <Nav />
 
       <article className="max-w-2xl mx-auto px-6 py-12 md:py-20">
-        <p className="text-scatter-muted font-mono text-sm mb-2">// privacy</p>
+        <p className="text-scatter-muted font-mono text-sm mb-2">{'// privacy'}</p>
         <h1 className="text-5xl font-black tracking-tight mb-4">
           privacy policy.
         </h1>
@@ -18,11 +18,11 @@ export default function Privacy() {
 
         <Section title="the short version">
           <p>
-            we designed scatter so we <strong>can't</strong> see your files —
+            we designed scatter so we <strong>can&apos;t</strong> see your files —
             not just that we promise not to. the decryption key never touches
-            our servers. we'd have to rewrite the product to spy on you.
+            our servers. we&apos;d have to rewrite the product to spy on you.
           </p>
-          <p>that said, here's what we do collect and why.</p>
+          <p>that said, here&apos;s what we do collect and why.</p>
         </Section>
 
         <Section title="what we collect">
@@ -47,10 +47,10 @@ export default function Privacy() {
 
           <h3 className="font-black mb-2">if you run a node</h3>
           <ul className="list-disc ml-6 space-y-1 text-scatter-muted">
-            <li>your node's id and declared capacity</li>
+            <li>your node&apos;s id and declared capacity</li>
             <li>when we last heard from your node</li>
             <li>
-              which encrypted shards you're holding (we don't know what they
+              which encrypted shards you&apos;re holding (we don&apos;t know what they
               contain)
             </li>
           </ul>
@@ -60,7 +60,7 @@ export default function Privacy() {
           <ul className="list-disc ml-6 space-y-1 text-scatter-muted">
             <li>the contents of any file</li>
             <li>original filenames</li>
-            <li>who downloads a file (downloads don't require an account)</li>
+            <li>who downloads a file (downloads don&apos;t require an account)</li>
             <li>
               the decryption key — it lives in the <code>#fragment</code> of
               share links, which browsers never send to us
@@ -70,13 +70,13 @@ export default function Privacy() {
 
         <Section title="who we share with">
           <p>
-            <strong>no one.</strong> we don't sell data, we don't do ads, and we
-            don't have analytics trackers on the site.
+            <strong>no one.</strong> we don&apos;t sell data, we don&apos;t do ads, and we
+            don&apos;t have analytics trackers on the site.
           </p>
           <p>
-            the only exception: if we receive a valid legal request, we'll
-            provide what we technically have access to (see "what we collect"
-            above). we can't hand over files themselves — we don't have the
+            the only exception: if we receive a valid legal request, we&apos;ll
+            provide what we technically have access to (see &quot;what we collect&quot;
+            above). we can&apos;t hand over files themselves — we don&apos;t have the
             keys.
           </p>
         </Section>
@@ -121,17 +121,17 @@ export default function Privacy() {
         <Section title="cookies">
           <p>
             we use <strong>one</strong> cookie-like thing: a session token in
-            your browser's local storage after you sign in. it's not cross-site,
-            it's not tracking, it's just how we know it's you on your next
+            your browser&apos;s local storage after you sign in. it&apos;s not cross-site,
+            it&apos;s not tracking, it&apos;s just how we know it&apos;s you on your next
             visit.
           </p>
         </Section>
 
         <Section title="changes">
           <p>
-            if we change this policy, we'll update the date above and note
+            if we change this policy, we&apos;ll update the date above and note
             significant changes on the homepage. if we ever make a change that
-            would affect your privacy negatively, we'll email account holders
+            would affect your privacy negatively, we&apos;ll email account holders
             first.
           </p>
         </Section>

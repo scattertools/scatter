@@ -58,7 +58,7 @@ export default function Status() {
       <Nav />
 
       <div className="max-w-2xl mx-auto px-6 py-12">
-        <p className="text-scatter-muted font-mono text-sm mb-2">// status</p>
+        <p className="text-scatter-muted font-mono text-sm mb-2">{'// status'}</p>
         <h1 className="text-5xl font-black tracking-tight mb-8">
           system status.
         </h1>
