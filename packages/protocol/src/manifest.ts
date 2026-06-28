@@ -9,6 +9,8 @@ import {
   decryptStream,
   generateKey,
   base64UrlEncode,
+  base64UrlDecode,
+  sha256Hex,
   type EncryptionKey,
 } from './crypto.ts';
 import { encodeShards, decodeShards, hashShards } from './sharding.ts';
@@ -30,14 +32,15 @@ export async function prepareUpload(
   const key = await generateKey();
   const fileId = generateFileId();
 
-  const encrypted = await encryptStream(file, key);
+  // Per-file salt: the AES-GCM key is HKDF-derived from key.raw + this salt.
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
+  const encrypted = await encryptStream(file, key, salt);
   const encryptedBytes = new Uint8Array(await encrypted.arrayBuffer());
   const encryptedSize = encryptedBytes.length;
 
   const shards = encodeShards(encryptedBytes, config);
   const shardInfos = await hashShards(shards, config.dataShards);
-
-  const salt = crypto.getRandomValues(new Uint8Array(16));
 
   const manifest: FileManifest = {
     version: PROTOCOL_VERSION,
@@ -70,12 +73,31 @@ export async function reassemble(
   shards: (Uint8Array | null)[],
   key: EncryptionKey,
 ): Promise<Blob> {
+  // Decode-time integrity check: recompute SHA-256 of each present shard and
+  // compare against manifest.shards[i].hash. A shard whose hash mismatches is
+  // treated as MISSING (nulled) rather than fed into RS decode, so erasure
+  // coding can route around the corruption instead of producing garbage.
+  // If too many shards end up nulled, decodeShards throws "Not enough shards".
+  const verified: (Uint8Array | null)[] = await Promise.all(
+    shards.map(async (shard, i) => {
+      if (!shard) return null;
+      const expected = manifest.shards[i]?.hash;
+      if (expected && (await sha256Hex(shard)) !== expected) return null;
+      return shard;
+    }),
+  );
+
   // Use exact ciphertext size from manifest — decodeShards will trim padding
   const encryptedData = decodeShards(
-    shards,
+    verified,
     manifest.sharding,
     manifest.encryptedSize,
   );
-  const decrypted = await decryptStream(new Blob([encryptedData]), key);
+  const salt = base64UrlDecode(manifest.encryption.salt);
+  const decrypted = await decryptStream(
+    new Blob([encryptedData as Uint8Array<ArrayBuffer>]),
+    key,
+    salt,
+  );
   return new Blob([decrypted], { type: manifest.mimeType });
 }

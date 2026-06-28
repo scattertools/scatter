@@ -1,5 +1,7 @@
-// Protocol version for future-proofing
-export const PROTOCOL_VERSION = 1;
+// Protocol version for future-proofing.
+// v2 = HKDF-SHA-256 key derivation (key.raw + manifest salt) + per-chunk AAD
+// binding the chunk index into AES-GCM. v1 envelopes are no longer produced.
+export const PROTOCOL_VERSION = 2;
 
 // Sharding parameters
 export interface ShardConfig {

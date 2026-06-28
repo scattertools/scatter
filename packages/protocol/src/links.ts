@@ -30,9 +30,11 @@ export function parseLink(url: string): ParsedLink {
 
 /** Crockford-base32-ish file IDs: short, readable, URL-safe, no confusing chars. */
 export function generateFileId(): string {
-  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // no I, L, O, U
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // no I, L, O, U (32 chars)
+  // 26 symbols * log2(32) = 130 bits of entropy. 256 % 32 === 0, so `b % 32`
+  // maps each byte uniformly across the 32-char alphabet (no modulo bias).
+  const bytes = crypto.getRandomValues(new Uint8Array(26));
   let out = '';
   for (const b of bytes) out += alphabet[b % 32];
-  return out; // 8 chars, ~40 bits of entropy
+  return out; // 26 chars, ~130 bits of entropy
 }
