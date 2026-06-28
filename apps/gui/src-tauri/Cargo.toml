@@ -1,0 +1,28 @@
+[package]
+name = "scatter-gui"
+version = "0.1.0"
+description = "Scatter Node GUI"
+authors = ["scattertools"]
+edition = "2021"
+
+# The library target backs both the desktop binary and mobile entry points.
+[lib]
+name = "scatter_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+dirs = "5"
+tokio-tungstenite = "0.24"
+base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
+futures-util = "0.3"
