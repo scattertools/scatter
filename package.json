@@ -1,6 +1,6 @@
 {
   "name": "scatter",
-  "private": true,
+  "private": false,
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter coordinator dev",
