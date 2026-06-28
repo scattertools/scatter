@@ -203,6 +203,133 @@ export function consumeLoginCode(
   return { userId: user.id, email: user.email };
 }
 
+// --- Device authorization flow ----------------------------------------------
+// OAuth-style flow for the desktop app: it starts a pending session, opens the
+// browser to /link, and polls until the signed-in user approves the user_code.
+
+/** Readable alphabet shared by login codes and device user codes. */
+const READABLE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+function randomReadable(len: number): string {
+  const bytes = randomBytes(len);
+  let out = '';
+  for (let i = 0; i < len; i++) out += READABLE_ALPHABET[bytes[i] % READABLE_ALPHABET.length];
+  return out;
+}
+
+export interface DeviceCodeRecord {
+  deviceCode: string;
+  userCode: string;
+  expiresInMinutes: number;
+}
+
+/**
+ * Begin a device authorization. Returns a secret `deviceCode` the app polls and
+ * a short, readable `userCode` (XXXX-XXXX) the person types/approves in the
+ * browser. No user is associated until approval.
+ */
+export function createDeviceCode(): DeviceCodeRecord {
+  const deviceCode = randomBytes(32).toString('base64url');
+  // 8 readable chars as XXXX-XXXX.
+  const raw = randomReadable(8);
+  const userCode = `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
+  const now = Date.now();
+  const expiresAt = now + env.DEVICE_CODE_TTL_MINUTES * 60_000;
+  db.prepare(
+    `INSERT INTO device_codes (device_code, user_code, user_id, approved, expires_at, created_at) VALUES (?, ?, NULL, 0, ?, ?)`,
+  ).run(deviceCode, userCode, expiresAt, now);
+  return {
+    deviceCode,
+    userCode,
+    expiresInMinutes: env.DEVICE_CODE_TTL_MINUTES,
+  };
+}
+
+/** Normalize a user-entered device user code into canonical XXXX-XXXX form. */
+function normalizeUserCode(code: string): string | null {
+  const compact = code
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  if (compact.length !== 8) return null;
+  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
+}
+
+export type DevicePollResult =
+  | { status: 'pending' }
+  | { status: 'expired' }
+  | { status: 'not_found' }
+  | { status: 'approved'; userId: string; email: string };
+
+/**
+ * Poll a device authorization by its secret device code. Returns the current
+ * status; once approved, the pending record is consumed (deleted) so the
+ * session is issued exactly once.
+ */
+export function pollDeviceCode(deviceCode: string): DevicePollResult {
+  const row = db
+    .prepare<
+      [string],
+      {
+        device_code: string;
+        user_id: string | null;
+        approved: number;
+        expires_at: number;
+      }
+    >(
+      `SELECT device_code, user_id, approved, expires_at FROM device_codes WHERE device_code = ?`,
+    )
+    .get(deviceCode);
+  if (!row) return { status: 'not_found' };
+  if (row.expires_at < Date.now()) {
+    db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(deviceCode);
+    return { status: 'expired' };
+  }
+  if (!row.approved || !row.user_id) return { status: 'pending' };
+
+  const user = getUserById(row.user_id);
+  if (!user) {
+    db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(deviceCode);
+    return { status: 'not_found' };
+  }
+
+  // Consume the pending record so it can't be replayed.
+  db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(deviceCode);
+  db.prepare(`UPDATE users SET last_login_at = ? WHERE id = ?`).run(
+    Date.now(),
+    user.id,
+  );
+  return { status: 'approved', userId: user.id, email: user.email };
+}
+
+/**
+ * Approve a pending device authorization by its short user code, binding it to
+ * the signed-in user. Returns false when the code is unknown or expired.
+ */
+export function approveDeviceCode(code: string, userId: string): boolean {
+  const normalized = normalizeUserCode(code);
+  if (!normalized) return false;
+
+  const row = db
+    .prepare<
+      [string],
+      { user_code: string; expires_at: number; approved: number }
+    >(
+      `SELECT user_code, expires_at, approved FROM device_codes WHERE user_code = ?`,
+    )
+    .get(normalized);
+  if (!row) return false;
+  if (row.expires_at < Date.now()) {
+    db.prepare(`DELETE FROM device_codes WHERE user_code = ?`).run(normalized);
+    return false;
+  }
+
+  db.prepare(
+    `UPDATE device_codes SET approved = 1, user_id = ? WHERE user_code = ?`,
+  ).run(userId, normalized);
+  return true;
+}
+
 export function consumeMagicLink(
   token: string,
 ): { userId: string; email: string } | null {

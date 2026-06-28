@@ -38,6 +38,20 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_login_codes_expires ON login_codes(expires_at);
 
+  -- Device authorization flow (OAuth-style): the desktop app starts a pending
+  -- session keyed by a secret device_code it polls, plus a short user_code the
+  -- person approves in the browser while signed in on the web.
+  CREATE TABLE IF NOT EXISTS device_codes (
+    device_code  TEXT PRIMARY KEY,
+    user_code    TEXT NOT NULL UNIQUE,
+    user_id      TEXT,
+    approved     INTEGER NOT NULL DEFAULT 0,
+    expires_at   INTEGER NOT NULL,
+    created_at   INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_device_codes_expires ON device_codes(expires_at);
+
   CREATE TABLE IF NOT EXISTS nodes (
     id                TEXT PRIMARY KEY,
     owner_user_id     TEXT,

@@ -5,6 +5,9 @@ import {
   consumeMagicLink,
   createLoginCode,
   consumeLoginCode,
+  createDeviceCode,
+  pollDeviceCode,
+  approveDeviceCode,
   issueSession,
   getUserById,
 } from '../auth.ts';
@@ -84,6 +87,65 @@ export async function authRoutes(app: FastifyInstance) {
         session,
         user: user ?? { id: result.userId, email: result.email, username: '' },
       };
+    },
+  );
+
+  // Device authorization flow (OAuth-style). The desktop app starts a session,
+  // opens the browser to the verification URL, and polls until approved.
+  app.post(
+    '/auth/device/start',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async () => {
+      const { deviceCode, userCode, expiresInMinutes } = createDeviceCode();
+      return {
+        deviceCode,
+        userCode,
+        verificationUrl: `${env.WEB_BASE_URL}/link`,
+        verificationUrlComplete: `${env.WEB_BASE_URL}/link?code=${encodeURIComponent(userCode)}`,
+        expiresInMinutes,
+        pollIntervalSeconds: 3,
+      };
+    },
+  );
+
+  // Poll a pending device authorization. Returns the current status; when the
+  // user has approved it in the browser, issues and returns the session.
+  app.post(
+    '/auth/device/poll',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = z.object({ deviceCode: z.string() }).parse(req.body);
+      const result = pollDeviceCode(body.deviceCode);
+      if (result.status === 'not_found')
+        return reply.code(404).send({ status: 'not_found' });
+      if (result.status === 'expired')
+        return reply.code(410).send({ status: 'expired' });
+      if (result.status === 'pending') return { status: 'pending' };
+
+      const session = await issueSession(result.userId, result.email);
+      const user = getUserById(result.userId);
+      return {
+        status: 'approved',
+        session,
+        user: user ?? { id: result.userId, email: result.email, username: '' },
+      };
+    },
+  );
+
+  // Approve a pending device authorization by its short user code. Requires the
+  // approving user to be signed in on the web.
+  app.post(
+    '/auth/device/approve',
+    {
+      preHandler: app.requireAuth,
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+    },
+    async (req, reply) => {
+      const body = z.object({ userCode: z.string() }).parse(req.body);
+      const ok = approveDeviceCode(body.userCode, req.user!.sub);
+      if (!ok)
+        return reply.code(400).send({ error: 'invalid or expired code' });
+      return { ok: true };
     },
   );
 
