@@ -80,6 +80,9 @@ pub(crate) struct AppState {
     shutdown_tx: Mutex<Option<mpsc::Sender<()>>>,
     ws_shutdown_tx: Mutex<Option<mpsc::Sender<()>>>,
     account: Mutex<Option<Account>>,
+    /// Secret device code for an in-progress OAuth-style login, kept server-side
+    /// so the frontend only ever sees the short user code.
+    pending_device_code: Mutex<Option<String>>,
 }
 
 impl Default for AppState {
@@ -91,6 +94,7 @@ impl Default for AppState {
             shutdown_tx: Mutex::new(None),
             ws_shutdown_tx: Mutex::new(None),
             account: Mutex::new(None),
+            pending_device_code: Mutex::new(None),
         }
     }
 }
@@ -194,6 +198,32 @@ struct VerifyUser {
 #[derive(Deserialize)]
 struct CreditsResponse {
     balance: i64,
+}
+
+/// Response from `POST /auth/device/start`.
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DeviceStartResponse {
+    device_code: String,
+    user_code: String,
+    verification_url: String,
+    verification_url_complete: String,
+    #[serde(default)]
+    expires_in_minutes: u64,
+    #[serde(default)]
+    poll_interval_seconds: u64,
+}
+
+/// What the frontend needs to drive the device flow. Mirrors the coordinator
+/// response but hides the secret `device_code`, which stays in the backend.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DeviceLogin {
+    user_code: String,
+    verification_url: String,
+    verification_url_complete: String,
+    expires_in_minutes: u64,
+    poll_interval_seconds: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -396,61 +426,112 @@ fn get_coordinator() -> String {
     load_config().coordinator
 }
 
-/// Step 1 of login: ask the coordinator to email a magic link.
+/// Step 1 of the OAuth-style device login: ask the coordinator for a device
+/// code + short user code, stash the secret device code, and hand the frontend
+/// everything it needs to open the verification page and start polling.
 #[tauri::command]
-async fn request_login(email: String) -> Result<(), String> {
+async fn start_device_login(state: State<'_, Arc<AppState>>) -> Result<DeviceLogin, String> {
     let config = load_config();
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{}/auth/request", config.coordinator))
-        .json(&serde_json::json!({ "email": email }))
+        .post(format!("{}/auth/device/start", config.coordinator))
         .send()
         .await
         .map_err(|e| format!("could not reach coordinator: {e}"))?;
 
     if !resp.status().is_success() {
-        return Err(format!("could not send link: {}", resp.status()));
-    }
-    Ok(())
-}
-
-/// Step 2 of login: exchange the token from the magic link for a session,
-/// persist it, and load the account's credit balance.
-#[tauri::command]
-async fn verify_login(state: State<'_, Arc<AppState>>, token: String) -> Result<Account, String> {
-    let mut config = load_config();
-    let client = reqwest::Client::new();
-
-    let resp = client
-        .post(format!("{}/auth/verify", config.coordinator))
-        .json(&serde_json::json!({ "token": token.trim() }))
-        .send()
-        .await
-        .map_err(|e| format!("could not reach coordinator: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err("invalid or expired code".to_string());
+        return Err(format!("could not start sign-in: {}", resp.status()));
     }
 
-    let verified = resp
-        .json::<VerifyResponse>()
+    let started = resp
+        .json::<DeviceStartResponse>()
         .await
         .map_err(|e| format!("bad response: {e}"))?;
 
-    config.session = Some(verified.session.clone());
-    save_config(&config);
+    *state.pending_device_code.lock().unwrap() = Some(started.device_code.clone());
 
-    let balance = fetch_balance(&client, &config.coordinator, &verified.session)
+    Ok(DeviceLogin {
+        user_code: started.user_code,
+        verification_url: started.verification_url,
+        verification_url_complete: started.verification_url_complete,
+        expires_in_minutes: started.expires_in_minutes,
+        poll_interval_seconds: started.poll_interval_seconds.max(1),
+    })
+}
+
+/// Step 2 of the device login: poll the coordinator with the stashed device
+/// code. Returns `Some(account)` once the user approves in the browser, `None`
+/// while still pending, or an error when the code is invalid/expired.
+#[tauri::command]
+async fn poll_device_login(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Option<Account>, String> {
+    let device_code = state
+        .pending_device_code
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or_else(|| "no sign-in in progress".to_string())?;
+
+    let mut config = load_config();
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/auth/device/poll", config.coordinator))
+        .json(&serde_json::json!({ "deviceCode": device_code }))
+        .send()
+        .await
+        .map_err(|e| format!("could not reach coordinator: {e}"))?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::GONE || status == reqwest::StatusCode::NOT_FOUND {
+        *state.pending_device_code.lock().unwrap() = None;
+        return Err("sign-in code expired, please try again".to_string());
+    }
+    if !status.is_success() {
+        return Err(format!("sign-in failed: {status}"));
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PollResponse {
+        status: String,
+        #[serde(default)]
+        session: Option<String>,
+        #[serde(default)]
+        user: Option<VerifyUser>,
+    }
+    let parsed = resp
+        .json::<PollResponse>()
+        .await
+        .map_err(|e| format!("bad response: {e}"))?;
+
+    if parsed.status != "approved" {
+        return Ok(None);
+    }
+
+    let session = parsed
+        .session
+        .ok_or_else(|| "missing session in response".to_string())?;
+    let user = parsed.user.unwrap_or(VerifyUser {
+        email: String::new(),
+        username: String::new(),
+    });
+
+    config.session = Some(session.clone());
+    save_config(&config);
+    *state.pending_device_code.lock().unwrap() = None;
+
+    let balance = fetch_balance(&client, &config.coordinator, &session)
         .await
         .unwrap_or(0);
 
     let account = Account {
-        email: verified.user.email,
-        username: verified.user.username,
+        email: user.email,
+        username: user.username,
         balance,
     };
     *state.account.lock().unwrap() = Some(account.clone());
-    Ok(account)
+    Ok(Some(account))
 }
 
 /// Alternative to the email flow: exchange a one-time login code (generated
@@ -646,8 +727,8 @@ pub fn run() {
             set_capacity,
             set_coordinator,
             get_coordinator,
-            request_login,
-            verify_login,
+            start_device_login,
+            poll_device_login,
             login_with_code,
             update_username,
             logout,
