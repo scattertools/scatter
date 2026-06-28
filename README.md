@@ -88,9 +88,6 @@ Or grab a binary from the [releases page](https://github.com/scattertools/scatte
 # Headless mode — set and forget
 scatter start --storage 50GB
 
-# Terminal UI with live stats
-scatter start --storage 50GB --tui
-
 # Sign in to earn credits toward bigger uploads
 scatter login
 ```
@@ -98,7 +95,6 @@ scatter login
 Modes:
 
 - `headless` — no UI, logs only
-- `tui` — terminal UI with live network stats
 - `gui` — desktop app (default) _(planned)_
 
 ## Building from Source

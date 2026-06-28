@@ -108,3 +108,6 @@ $RECYCLE.BIN/
 .parcel-cache/
 .eslintcache
 .stylelintcache
+
+# ---------- Code intelligence / local tooling ----------
+.codegraph/
