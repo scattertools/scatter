@@ -164,4 +164,4 @@ Scatter is designed with zero-knowledge principles, but cryptography is hard. We
 
 ## License
 
-[AGPL-3.0](/license) — if you run a modified version as a service, you have to share your changes. Keeps the ecosystem open.
+[AGPL-3.0](https://github.com/scattertools/scatter?tab=AGPL-3.0-1-ov-file) — if you run a modified version as a service, you have to share your changes. Keeps the ecosystem open.
