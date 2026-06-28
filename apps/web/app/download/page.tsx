@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { FiDownload, FiPackage } from 'react-icons/fi';
+import { FiDownload, FiPackage, FiLoader } from 'react-icons/fi';
 import { FaApple, FaLinux, FaWindows } from 'react-icons/fa';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
@@ -17,14 +17,57 @@ function detectPlatform(): Platform {
   return 'mac';
 }
 
-const RELEASES_URL =
-  'https://github.com/scattertools/scatter/releases/latest';
-const SOURCE_URL = 'https://github.com/scattertools/scatter';
-const BINARIES: Record<Platform, { file: string; label: string }> = {
-  mac: { file: 'scatter-macos-arm64.tar.gz', label: 'macOS (Apple Silicon)' },
-  linux: { file: 'scatter-linux-x64.tar.gz', label: 'Linux (x64)' },
-  windows: { file: 'scatter-windows-x64.zip', label: 'Windows (x64)' },
+const REPO = 'scattertools/scatter';
+const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
+const SOURCE_URL = `https://github.com/${REPO}`;
+const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+  mac: 'macOS (Apple Silicon)',
+  linux: 'Linux (x64)',
+  windows: 'Windows (x64)',
 };
+
+// A GitHub release asset (only the fields we use).
+interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+interface LatestRelease {
+  tag_name: string;
+  assets: ReleaseAsset[];
+}
+
+// Resolved download links per platform, derived from the latest release's
+// assets. A platform maps to null when the release has no matching installer.
+type Downloads = Record<Platform, { url: string; name: string } | null>;
+
+// Match the Tauri bundle filenames (bundle.targets: "all") to a platform.
+// macOS  -> .dmg          (aarch64 = Apple Silicon, x64/x86_64 = Intel)
+// Windows -> *-setup.exe (NSIS, preferred) or .msi
+// Linux  -> .AppImage (preferred, portable) or .deb
+function resolveDownloads(assets: ReleaseAsset[]): Downloads {
+  const find = (pred: (n: string) => boolean) => {
+    const a = assets.find((x) => pred(x.name.toLowerCase()));
+    return a ? { url: a.browser_download_url, name: a.name } : null;
+  };
+
+  const mac =
+    // Prefer Apple Silicon; fall back to Intel, then any .dmg.
+    find((n) => n.endsWith('.dmg') && n.includes('aarch64')) ??
+    find((n) => n.endsWith('.dmg') && (n.includes('x64') || n.includes('x86_64'))) ??
+    find((n) => n.endsWith('.dmg'));
+
+  const windows =
+    find((n) => n.endsWith('-setup.exe')) ??
+    find((n) => n.endsWith('.exe')) ??
+    find((n) => n.endsWith('.msi'));
+
+  const linux =
+    find((n) => n.endsWith('.appimage')) ?? find((n) => n.endsWith('.deb'));
+
+  return { mac, windows, linux };
+}
 
 // The auto-detected platform is a client-only value (navigator.userAgent), so
 // it's read via useSyncExternalStore to avoid a hydration mismatch (server
@@ -32,6 +75,11 @@ const BINARIES: Record<Platform, { file: string; label: string }> = {
 function subscribePlatform() {
   return () => {};
 }
+
+type ReleaseState =
+  | { status: 'loading' }
+  | { status: 'none' } // no published release yet (404 / no matching assets)
+  | { status: 'ready'; version: string; downloads: Downloads };
 
 export default function DownloadApp() {
   const detected = useSyncExternalStore<Platform>(
@@ -44,6 +92,43 @@ export default function DownloadApp() {
   const platform = override ?? detected;
   const setPlatform = setOverride;
 
+  const [release, setRelease] = useState<ReleaseState>({ status: 'loading' });
+
+  // Fetch the latest GitHub release on mount and derive per-platform asset
+  // URLs. Done client-side so a new release is picked up without redeploying
+  // the site (no build-time caching of the release list).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(LATEST_API, {
+          headers: { Accept: 'application/vnd.github+json' },
+        });
+        // 404 = no published (non-draft, non-prerelease) release yet.
+        if (!res.ok) {
+          if (!cancelled) setRelease({ status: 'none' });
+          return;
+        }
+        const data: LatestRelease = await res.json();
+        const downloads = resolveDownloads(data.assets ?? []);
+        const hasAny = Object.values(downloads).some(Boolean);
+        if (cancelled) return;
+        setRelease(
+          hasAny
+            ? { status: 'ready', version: data.tag_name, downloads }
+            : { status: 'none' },
+        );
+      } catch {
+        if (!cancelled) setRelease({ status: 'none' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const current = release.status === 'ready' ? release.downloads[platform] : null;
+
   return (
     <main className="page-wrapper bg-scatter-bg text-scatter-text">
       <Nav />
@@ -52,6 +137,9 @@ export default function DownloadApp() {
         <div className="mb-8">
           <p className="text-scatter-muted font-mono text-sm mb-2">
             {'// node app'}
+            {release.status === 'ready' && (
+              <span className="ml-2 text-scatter-text">{release.version}</span>
+            )}
           </p>
           <h1 className="text-5xl font-black tracking-tight mb-3">
             run a scatter node.
@@ -62,25 +150,27 @@ export default function DownloadApp() {
           </p>
         </div>
 
-        {/* Status banner */}
-        <div className="mb-8 p-4 border-2 border-scatter-border bg-scatter-warning/10 flex items-start gap-3">
-          <FiPackage size={20} className="flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-black">in development — not released yet</p>
-            <p className="text-sm text-scatter-muted">
-              the desktop node app isn&apos;t shipped yet. when the first
-              release is published, it&apos;ll appear on the{' '}
-              <Link href={RELEASES_URL} className="underline font-semibold">
-                releases page
-              </Link>{' '}
-              and the button below will download it. in the meantime you can{' '}
-              <Link href="/" className="underline font-semibold">
-                share files
-              </Link>{' '}
-              right from the web.
-            </p>
+        {/* Status banner — only while there is no published release yet. */}
+        {release.status === 'none' && (
+          <div className="mb-8 p-4 border-2 border-scatter-border bg-scatter-warning/10 flex items-start gap-3">
+            <FiPackage size={20} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-black">in development — not released yet</p>
+              <p className="text-sm text-scatter-muted">
+                the desktop node app isn&apos;t shipped yet. when the first
+                release is published, it&apos;ll appear on the{' '}
+                <Link href={RELEASES_URL} className="underline font-semibold">
+                  releases page
+                </Link>{' '}
+                and the button below will download it. in the meantime you can{' '}
+                <Link href="/" className="underline font-semibold">
+                  share files
+                </Link>{' '}
+                right from the web.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Download buttons - PRIMARY */}
         <div className="mb-8 border-2 border-scatter-border bg-scatter-surface shadow-brutal p-6">
@@ -108,14 +198,33 @@ export default function DownloadApp() {
             />
           </div>
 
-          {/* Big download button */}
-          <a
-            href={`${RELEASES_URL}/download/${BINARIES[platform].file}`}
-            className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-3 text-lg"
-          >
-            <FiDownload size={22} />
-            download for {BINARIES[platform].label}
-          </a>
+          {/* Big download button — resolves to the real latest-release asset.
+              States: loading (disabled), ready+asset (direct download),
+              ready-but-no-asset-for-this-platform / none (link to releases). */}
+          {release.status === 'loading' ? (
+            <div className="w-full px-6 py-4 bg-scatter-bg text-scatter-muted font-bold border-2 border-scatter-border flex items-center justify-center gap-3 text-lg">
+              <FiLoader size={22} className="animate-spin" />
+              checking latest release…
+            </div>
+          ) : current ? (
+            <a
+              href={current.url}
+              className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-3 text-lg"
+            >
+              <FiDownload size={22} />
+              download for {PLATFORM_LABELS[platform]}
+            </a>
+          ) : (
+            <a
+              href={RELEASES_URL}
+              className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-3 text-lg"
+            >
+              <FiDownload size={22} />
+              {release.status === 'ready'
+                ? `no ${PLATFORM_LABELS[platform]} build — see all releases`
+                : 'view releases'}
+            </a>
+          )}
 
           <div className="mt-4 flex items-center justify-center gap-4 text-sm text-scatter-muted">
             <Link

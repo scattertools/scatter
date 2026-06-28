@@ -1,0 +1,121 @@
+name: Release
+
+# Cuts a public release of the downloadable Scatter desktop app:
+#   - GUI (apps/gui) : Tauri desktop installers for macOS, Windows, Linux
+#
+# NOT shipped here:
+#   - web / coordinator : long-running services (Vercel / Fly.io), not downloads.
+#   - node CLI (apps/node) : headless/power-user path, built from source from the
+#     repo for now (clone + `pnpm --filter node build`; see apps/node/service/).
+#
+# Trigger: push a SemVer tag, e.g.
+#   git tag v0.1.0 && git push origin v0.1.0
+# The workflow creates a GitHub Release named after the tag and attaches every
+# installer as an asset. Releases start as drafts so you can review the
+# artifacts and write notes before publishing.
+#
+# Tauri apps CANNOT be cross-compiled, so each OS bundle is produced on its own
+# runner via a build matrix. Builds are UNSIGNED for now: macOS users
+# right-click -> Open (Gatekeeper), Windows users click "More info -> Run
+# anyway" (SmartScreen). Add signing secrets later to remove those prompts.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # required to create the GitHub Release and upload assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build the Tauri desktop app on each OS and attach installers to the
+  # release. tauri-action creates the release (if missing) on first run.
+  # ---------------------------------------------------------------------------
+  gui:
+    name: GUI (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon
+          - platform: macos-latest
+            label: macOS (Apple Silicon)
+            args: '--target aarch64-apple-darwin'
+            rust-target: aarch64-apple-darwin
+          # Intel Macs
+          - platform: macos-latest
+            label: macOS (Intel)
+            args: '--target x86_64-apple-darwin'
+            rust-target: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            label: Linux
+            args: ''
+            rust-target: ''
+          - platform: windows-latest
+            label: Windows
+            args: ''
+            rust-target: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Linux needs the webkit2gtk / gtk / appindicator system libraries that
+      # Tauri links against. (macOS and Windows ship the needed webview.)
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      # Cache the Cargo build of src-tauri so re-runs are fast.
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/gui/src-tauri -> target
+          key: ${{ matrix.platform }}-${{ matrix.rust-target }}
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tauri-action runs the frontend build (beforeBuildCommand: pnpm build),
+      # compiles src-tauri, bundles installers, then uploads them to the
+      # release whose tag is tagName. Subsequent matrix legs reuse that release.
+      - name: Build & upload Tauri bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/gui
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Scatter ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
