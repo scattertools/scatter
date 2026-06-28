@@ -1,0 +1,33 @@
+# =============================================================================
+# Scatter — Caddy reverse proxy with automatic HTTPS.
+#
+# Used by docker-compose.prod.yml. Caddy terminates TLS and proxies:
+#   https://<WEB_DOMAIN>  -> web:3000        (Next.js app)
+#   https://<API_DOMAIN>  -> coordinator:4000 (Fastify API + WebSocket)
+#
+# Set WEB_DOMAIN / API_DOMAIN / TLS_EMAIL in .env. Caddy obtains and renews
+# Let's Encrypt certificates automatically for real (public, DNS-pointed)
+# domains. For local testing it falls back to internal self-signed certs.
+#
+# Because the coordinator now sits behind this proxy, set in .env:
+#   TRUST_PROXY=true
+# so rate limiting keys on the real client IP from X-Forwarded-For.
+# =============================================================================
+
+{
+	email {$TLS_EMAIL}
+}
+
+# Web app
+{$WEB_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+# Coordinator API (REST + WebSocket node connections). Caddy proxies
+# WebSocket upgrades transparently, and forwards X-Forwarded-For so the
+# coordinator's trustProxy can recover the real client IP.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy coordinator:4000
+}

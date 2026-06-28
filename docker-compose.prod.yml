@@ -1,0 +1,55 @@
+# =============================================================================
+# Scatter — production overlay: TLS reverse proxy in front of web + coordinator.
+#
+#   1. In .env set:  WEB_DOMAIN, API_DOMAIN, TLS_EMAIL, TRUST_PROXY=true,
+#      and point NEXT_PUBLIC_API_URL / NEXT_PUBLIC_WEB_URL / WEB_BASE_URL /
+#      ALLOWED_ORIGINS at the https:// domains.
+#   2. docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# This overlay:
+#   - adds a Caddy edge proxy (auto-HTTPS) on :80/:443
+#   - stops publishing the raw web/coordinator ports to the host (proxy-only
+#     access), so the apps are reachable ONLY through TLS.
+# =============================================================================
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    cap_add:
+      - NET_BIND_SERVICE
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?set WEB_DOMAIN in .env}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+      TLS_EMAIL: ${TLS_EMAIL:-}
+    depends_on:
+      coordinator:
+        condition: service_healthy
+      web:
+        condition: service_started
+    stop_grace_period: 15s
+
+  # Behind the proxy the apps are not published directly to the host. Override
+  # the base file's host port mappings with internal-only (expose) so traffic
+  # must traverse Caddy/TLS. `ports: []` clears the base mappings.
+  coordinator:
+    ports: []
+    expose:
+      - '4000'
+
+  web:
+    ports: []
+    expose:
+      - '3000'
+
+volumes:
+  caddy-data:
+  caddy-config:
