@@ -1,0 +1,80 @@
+name: CI
+
+# Runs typecheck + lint + test + build across the pnpm workspace.
+#
+# Note on the GUI (apps/gui, "scatter-gui"): it is a Tauri/Rust app that
+# requires system webkit/gtk libraries and a Rust toolchain to build. A full
+# Tauri build is slow and prone to spurious CI failures from missing system
+# deps, so it is intentionally NOT built here. The TypeScript packages it
+# depends on are still validated below.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Cancel in-progress runs for the same ref when a new commit is pushed.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Typecheck, Lint, Test, Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Enable corepack so the pnpm version pinned in package.json
+      # (packageManager: pnpm@10.33.2) is used automatically.
+      - name: Enable corepack
+        run: corepack enable
+
+      # No pnpm cache here: pnpm-lock.yaml is gitignored, so a fresh checkout
+      # has no committed lockfile to key a cache on.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Install WITHOUT --frozen-lockfile: the lockfile is gitignored and is
+      # not present in a fresh checkout, so a frozen install would fail.
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Typecheck (protocol, coordinator, node)
+        run: |
+          pnpm --filter @scatter/protocol typecheck
+          pnpm --filter coordinator typecheck
+          pnpm --filter node typecheck
+
+      # web is the only package with a lint script. It currently has many
+      # pre-existing lint violations in application source, which CI is not
+      # allowed to modify. Keep lint running for visibility but do not let it
+      # block the pipeline until those are addressed. Remove continue-on-error
+      # once the existing violations are fixed.
+      - name: Lint (web)
+        continue-on-error: true
+        run: pnpm --filter web lint
+
+      - name: Test (protocol, coordinator, node)
+        # JWT_SECRET is required by the coordinator app/tests and must be at
+        # least 32 chars. This is a hardcoded CI-only dummy value (no real
+        # secret is configured); it grants no access to anything.
+        env:
+          JWT_SECRET: ci-dummy-jwt-secret-0123456789abcdefghij
+        run: |
+          pnpm --filter @scatter/protocol test
+          pnpm --filter coordinator test
+          pnpm --filter node test
+
+      # Build protocol first so dependents resolve cleanly, then the apps.
+      - name: Build (protocol, coordinator, node, web)
+        run: |
+          pnpm --filter @scatter/protocol build
+          pnpm --filter coordinator build
+          pnpm --filter node build
+          pnpm --filter web build

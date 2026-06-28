@@ -1,0 +1,73 @@
+# Keep the build context lean and free of secrets / build artifacts / DBs.
+# Both Dockerfiles use the repo root as context.
+
+# Dependencies (reinstalled in the image)
+**/node_modules
+.pnpm-store
+
+# Build output (rebuilt in the image)
+**/dist
+**/build
+**/out
+**/.next
+**/*.tsbuildinfo
+**/next-env.d.ts
+.turbo
+
+# Tauri desktop app — never containerized
+apps/gui/src-tauri/target
+apps/gui/dist
+
+# Environment & secrets — never leak into images
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+.dev.vars
+*.pem
+*.key
+*.crt
+*.p12
+
+# Local databases / data dirs (DATABASE_PATH lives on a named volume instead)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local node/shard storage & uploads
+.scatter/
+shards/
+uploads/
+tmp/
+waitlist.jsonl
+test-manifests/
+
+# VCS & tooling
+.git
+.gitignore
+.github
+.vscode
+.idea
+.wrangler
+
+# Docker artifacts
+Dockerfile
+**/Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Logs / caches / coverage
+**/*.log
+logs/
+coverage/
+.nyc_output/
+.eslintcache
+.cache/
+
+# OS cruft
+.DS_Store
+Thumbs.db

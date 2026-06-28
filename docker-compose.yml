@@ -1,0 +1,72 @@
+# =============================================================================
+# Scatter — full local stack (generic Docker, no cloud/k8s).
+#
+#   1. cp .env.example .env  &&  edit JWT_SECRET (openssl rand -hex 32)
+#   2. docker compose up -d --build
+#   3. web -> http://localhost:3000   coordinator -> http://localhost:4000
+#
+# Only the coordinator + web are containerized. The `node` agent and the `gui`
+# (Tauri desktop) apps are intentionally NOT included.
+# =============================================================================
+
+services:
+  coordinator:
+    build:
+      context: .
+      dockerfile: apps/coordinator/Dockerfile
+    image: scatter-coordinator
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # DB lives on the named volume mounted at /data (overrides any .env value).
+      DATABASE_PATH: /data/scatter.db
+      PORT: 4000
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      # JWT_SECRET, ALLOWED_ORIGINS, WEB_BASE_URL, SMTP_*, credits/limits, etc.
+      # all come from .env via env_file above.
+    ports:
+      - '4000:4000'
+    volumes:
+      - coordinator-data:/data
+    healthcheck:
+      # /health returns {"ok":true,...}. Node is present in the runtime image;
+      # curl/wget are not, so probe with a tiny node one-liner.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined at build time (client bundle). Point the
+        # browser at the host-published coordinator port.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-http://localhost:3000}
+    image: scatter-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - '3000:3000'
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    stop_grace_period: 15s
+
+volumes:
+  coordinator-data:
