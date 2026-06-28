@@ -1,0 +1,65 @@
+# =============================================================================
+# Fly.io config for the Scatter coordinator (the only stateful service).
+#
+# The coordinator MUST run as a single, always-on machine: it keeps live node
+# WebSocket connections in an in-memory map (NodeHub) and stores state in a
+# local SQLite file on a persistent volume. Do NOT scale it past 1 machine and
+# do NOT let it auto-stop, or you drop every node connection.
+#
+# First-time setup (see DEPLOY.md for the full walkthrough):
+#   fly launch --no-deploy --copy-config      # reuse this file
+#   fly volume create scatter_data --size 3 --region <your-region>
+#   fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+#   fly secrets set ALLOWED_ORIGINS=https://scatter.tools \
+#                   WEB_BASE_URL=https://scatter.tools
+#   fly deploy
+# =============================================================================
+
+app = "scatter-coordinator"            # change to your unique Fly app name
+primary_region = "iad"                 # pick one near you / your nodes
+
+[build]
+  dockerfile = "apps/coordinator/Dockerfile"
+
+[env]
+  PORT = "4000"
+  HOST = "0.0.0.0"
+  NODE_ENV = "production"
+  DATABASE_PATH = "/data/scatter.db"   # on the mounted volume below
+  # Behind Fly's edge proxy, trust the immediate upstream so req.ip (and the
+  # rate limiter) sees the real client from X-Forwarded-For.
+  TRUST_PROXY = "true"
+  # JWT_SECRET, ALLOWED_ORIGINS, WEB_BASE_URL, SMTP_* are set via `fly secrets`.
+
+# Persistent volume for the SQLite database (survives deploys/restarts).
+[mounts]
+  source = "scatter_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  # CRITICAL: never auto-stop and always keep one machine running, otherwise
+  # live node WebSocket connections (held in memory) are lost.
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # Relays buffer shard bytes in memory; cap connections to bound RAM use.
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+
+[[http_service.checks]]
+  method = "GET"
+  path = "/health"
+  interval = "15s"
+  timeout = "5s"
+  grace_period = "10s"
+
+# Single small machine. Bump memory if you see OOM under concurrent relays
+# (shards are buffered in RAM as base64 — see DEPLOY.md scaling notes).
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
