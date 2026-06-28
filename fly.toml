@@ -16,7 +16,7 @@
 # =============================================================================
 
 app = "scatter-coordinator"            # change to your unique Fly app name
-primary_region = "iad"                 # pick one near you / your nodes
+primary_region = "lax"                 # pick one near you / your nodes
 
 [build]
   dockerfile = "apps/coordinator/Dockerfile"
