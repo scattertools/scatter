@@ -36,9 +36,12 @@ test('verifySession returns null on a garbage token', async () => {
 
 test('verifySession returns null on a tampered token', async () => {
   const token = await auth.issueSession('user-123', 'alice@example.com');
-  // Flip a character in the signature section.
+  // Flip the FIRST character of the payload section. (Tampering the final
+  // character of a section is unreliable: base64url's last char carries
+  // padding bits that are discarded on decode, so some flips decode to the
+  // same bytes. The first char has no such padding.)
   const parts = token.split('.');
-  parts[2] = parts[2].slice(0, -1) + (parts[2].at(-1) === 'A' ? 'B' : 'A');
+  parts[1] = (parts[1][0] === 'e' ? 'f' : 'e') + parts[1].slice(1);
   assert.equal(await auth.verifySession(parts.join('.')), null);
 });
 
