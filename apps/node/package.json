@@ -1,0 +1,26 @@
+{
+  "name": "node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "scatter": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "node --experimental-transform-types --env-file-if-exists=.env src/cli.ts start",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
+    "start": "node dist/cli.js start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-transform-types --no-warnings 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "ws": "^8.20.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.0"
+  }
+}

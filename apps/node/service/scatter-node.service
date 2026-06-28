@@ -1,0 +1,33 @@
+[Unit]
+Description=Scatter storage node
+Documentation=https://scatter.tools
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The user the node runs as. Its home directory holds ~/.scatter/config.json.
+User=__USER__
+Group=__USER__
+
+# Absolute path to the compiled CLI entry produced by `pnpm --filter node build`.
+# Adjust to wherever the built `apps/node/dist` lives on the host, e.g.
+#   /opt/scatter/apps/node/dist/cli.js
+# If you `npm i -g` (or `pnpm link`) the package, point this at the resolved
+# `scatter` shim instead (run `command -v scatter` to find it).
+ExecStart=/usr/bin/env node __EXEC_PATH__ start
+
+# Restart on crash with a short backoff.
+Restart=on-failure
+RestartSec=5
+
+# Config + shard storage live under the user's ~/.scatter by default. Set
+# SCATTER_DATA_DIR / pass --data-dir if you relocate it.
+Environment=NODE_ENV=production
+
+# Light hardening — relax if your storage path is outside the home dir.
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

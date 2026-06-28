@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd agent for the Scatter storage node (macOS).
+
+  Replace the placeholders before installing:
+    __NODE_BIN__   absolute path to the `node` binary (run `command -v node`)
+    __EXEC_PATH__  absolute path to the compiled CLI, e.g.
+                   /opt/scatter/apps/node/dist/cli.js
+    __HOME__       the user's home dir (where ~/.scatter/config.json lives)
+
+  Config + shard storage default to $HOME/.scatter — see service/README.md.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>tools.scatter.node</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_BIN__</string>
+    <string>__EXEC_PATH__</string>
+    <string>start</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/.scatter/node.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.scatter/node.err.log</string>
+</dict>
+</plist>
