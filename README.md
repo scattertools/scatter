@@ -50,60 +50,48 @@ No one can read your files. The decryption key lives in the URL fragment, which 
 
 Any 10 of the 14 shards are enough to rebuild the file, so up to 4 nodes can go offline without data loss.
 
+## Repository Layout
+
+Scatter is a pnpm monorepo:
+
+```
+apps/
+  web/          Next.js front end — upload, download, auth, dashboard
+  coordinator/  Fastify API — assigns shards, relays uploads/downloads, auth + credits
+  node/         CLI storage agent (`scatter`) — stores shards, talks to the coordinator
+  gui/          Tauri desktop app for running a node with a UI (in progress)
+packages/
+  protocol/     Shared core — crypto, Reed-Solomon sharding, manifests, link codecs
+```
+
 ## Getting Started
 
 The quickest way to use Scatter is through the hosted service at **[scatter.tools](https://scatter.tools)** — no install needed.
 
-Want to contribute storage and earn credits? Run a node.
+Want to contribute storage and earn credits? Run a node — see [Run a Node](#run-a-node).
 
-### Install the Node App
+### Download a Node Binary
 
-> 📦 **Coming soon.** Pre-built binaries for macOS, Linux, and Windows.
-
-Once released, you'll be able to install via:
-
-**macOS / Linux (Homebrew):**
+Prebuilt node binaries are published on the [GitHub Releases page](https://github.com/scattertools/scatter/releases). Download the build for your platform, then start contributing:
 
 ```bash
-brew install scatter
+scatter start --storage 50GB --coordinator https://scatter.tools
+scatter status   # show this machine's node config + link state
+scatter reset    # forget the node ID (re-registers on next start)
 ```
 
-**Linux (Direct):**
+Config and shards live in `~/.scatter` by default (override with `--data-dir`).
 
-```bash
-curl -fsSL https://scatter.tools/install.sh | sh
-```
-
-**Windows (Scoop):**
-
-```bash
-scoop install scatter
-```
-
-Or grab a binary from the [releases page](https://github.com/scattertools/scatter/releases).
-
-### Run a Node
-
-```bash
-# Headless mode — set and forget
-scatter start --storage 50GB
-
-# Sign in to earn credits toward bigger uploads
-scatter login
-```
-
-Modes:
-
-- `headless` — no UI, logs only
-- `gui` — desktop app (default) _(planned)_
+Prefer to build it yourself? See [Building from Source](#building-from-source).
 
 ## Building from Source
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org) 20+ (24+ recommended)
-- [pnpm](https://pnpm.io) 9+
-- Optional: Docker + Docker Compose for running the full stack
+- [Node.js](https://nodejs.org) 20+ (24+ recommended — the apps run TypeScript directly via `--experimental-strip-types`)
+- [pnpm](https://pnpm.io) 10+
+- For the desktop GUI: a [Rust toolchain](https://rustup.rs) (Tauri builds a native binary)
+- Optional: Docker + Docker Compose for running the full stack in containers
 
 ### Download & Install
 
@@ -113,35 +101,85 @@ cd scatter
 pnpm install
 ```
 
+### Configure
+
+Copy the environment template and set a JWT secret for the coordinator:
+
+```bash
+cp .env.example .env
+# JWT_SECRET must be at least 32 chars — the coordinator refuses to boot otherwise:
+openssl rand -hex 32
+```
+
+The only required variable is `JWT_SECRET`. Everything else (ports, SMTP, credits,
+upload limits) has sensible defaults documented in `.env.example`. If SMTP is left
+unset, magic-link sign-in emails are printed to the coordinator console instead of sent.
+
+### Run the Coordinator
+
+```bash
+pnpm dev:api
+```
+
+Serves the API on http://localhost:4000 (health check at `/health`).
+
 ### Run the Web App
 
 ```bash
 pnpm dev:web
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. Point it at the coordinator with `NEXT_PUBLIC_API_URL`
+(defaults to `http://localhost:4000`).
 
-### Run the Coordinator _(coming soon)_
-
-```bash
-pnpm dev:api
-```
-
-### Run a Node _(coming soon)_
+### Run a Node
 
 ```bash
-pnpm dev:node
+# Set and forget — allocate storage and start contributing
+pnpm dev:node -- --storage 50GB
+
+# Or, after building, run the compiled `scatter` binary directly:
+scatter start --storage 50GB --coordinator http://localhost:4000
+scatter status   # show this machine's node config + link state
+scatter reset    # forget the node ID (re-registers on next start)
 ```
+
+Config and shards live in `~/.scatter` by default (override with `--data-dir`).
+
+> Don't want to build it? Grab a prebuilt binary from the
+> [GitHub Releases page](https://github.com/scattertools/scatter/releases) instead.
+
+### Run the Desktop GUI _(in progress)_
+
+```bash
+pnpm dev:app
+```
+
+A [Tauri](https://tauri.app) app that runs a node with a desktop UI instead of the CLI.
+
+### Run the Full Stack with Docker
+
+The coordinator and web app are containerized:
+
+```bash
+cp .env.example .env   # set JWT_SECRET
+docker compose up -d --build
+# web -> http://localhost:3000   coordinator -> http://localhost:4000
+```
+
+The `node` agent and `gui` desktop app are intentionally not containerized — run those
+locally as shown above.
 
 ## Roadmap
 
 - [x] Landing page
 - [x] Protocol: encryption + sharding + manifests
-- [ ] Coordinator API
-- [ ] Node app (headless + TUI)
-- [ ] Web upload/download flow
-- [ ] Credits system
+- [x] Coordinator API
+- [x] Node app (headless CLI)
+- [x] Web upload/download flow
+- [x] Credits system
 - [ ] Desktop GUI app
+- [ ] Published binaries (Homebrew / Scoop / install script)
 - [ ] Public launch
 - [ ] Direct P2P transfers (skip the relay)
 - [ ] Mobile app?
