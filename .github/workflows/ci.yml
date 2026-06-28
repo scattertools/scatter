@@ -33,17 +33,18 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
-      # No pnpm cache here: pnpm-lock.yaml is gitignored, so a fresh checkout
-      # has no committed lockfile to key a cache on.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      # Install WITHOUT --frozen-lockfile: the lockfile is gitignored and is
-      # not present in a fresh checkout, so a frozen install would fail.
+      # Frozen install: the committed pnpm-lock.yaml is the source of truth, so
+      # CI fails fast if it drifts from the manifests instead of silently
+      # resolving new versions. Keeps CI/Docker/local builds reproducible.
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck (protocol, coordinator, node)
         run: |

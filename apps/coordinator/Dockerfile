@@ -35,12 +35,12 @@ RUN apt-get update \
 # coordinator and its workspace dep @scatter/protocol are needed.
 COPY . .
 
-# Install all workspace deps. The lockfile is gitignored, so it may be absent
-# in the build context — install without --frozen-lockfile and let pnpm resolve
-# (creating one if needed). Native postinstall builds are allow-listed in
+# Install all workspace deps from the committed lockfile. --frozen-lockfile
+# makes the build reproducible and fails fast if pnpm-lock.yaml has drifted
+# from the manifests. Native postinstall builds are allow-listed in
 # pnpm-workspace.yaml (better-sqlite3 / esbuild / sharp).
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-  pnpm install
+  pnpm install --frozen-lockfile
 
 # Build @scatter/protocol then the coordinator (tsc -> dist/, plain-node JS).
 RUN pnpm --filter @scatter/protocol build \

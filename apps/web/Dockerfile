@@ -44,7 +44,7 @@ ENV NODE_ENV=production
 COPY . .
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-  pnpm install
+  pnpm install --frozen-lockfile
 
 RUN pnpm --filter web build
 

@@ -96,7 +96,7 @@ Prefer to build it yourself? See [Building from Source](#building-from-source).
 ### Download & Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/scatter.git
+git clone https://github.com/scattertools/scatter.git
 cd scatter
 pnpm install
 ```
