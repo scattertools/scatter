@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-scatter-primary: #059669;
@@ -28,12 +28,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Brutalist button — lifts on hover, presses in on click */
+/* Page wrapper for sticky footer */
+.page-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .brutal-btn {
-  transition: transform 0.1s, box-shadow 0.1s;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
 }
 .brutal-btn:hover {
-  transform: translate(-1px, -1px);
+  transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0 0 #0a0a0a;
 }
 .brutal-btn:active {
@@ -42,7 +50,9 @@ body {
 }
 
 .brutal-btn-sm {
-  transition: transform 0.1s, box-shadow 0.1s;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
 }
 .brutal-btn-sm:hover {
   transform: translate(-1px, -1px);
@@ -53,10 +63,12 @@ body {
   box-shadow: 0 0 0 0 #0a0a0a;
 }
 
-/* Nav/text links — swap to inverted on hover */
 .brutal-link {
-  transition: background-color 0.1s, color 0.1s;
+  transition:
+    background-color 0.1s,
+    color 0.1s;
 }
+
 .brutal-link:hover {
   background-color: #0a0a0a;
   color: #f5f5f4;
