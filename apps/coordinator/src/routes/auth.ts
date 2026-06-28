@@ -28,7 +28,28 @@ const usernameSchema = z
 export async function authRoutes(app: FastifyInstance) {
   app.post(
     '/auth/request',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          // Key on IP + target email so a single IP can't blast many
+          // addresses and a single address can't be email-bombed from one
+          // source. Falls back to IP-only if the body has no valid email
+          // (the handler's zod parse rejects those anyway).
+          keyGenerator: (req) => {
+            const email =
+              req.body &&
+              typeof req.body === 'object' &&
+              'email' in req.body &&
+              typeof (req.body as { email?: unknown }).email === 'string'
+                ? (req.body as { email: string }).email.toLowerCase().trim()
+                : '';
+            return `${req.ip}:${email}`;
+          },
+        },
+      },
+    },
     async (req, reply) => {
       const body = z.object({ email: z.string().email() }).parse(req.body);
       const token = createMagicLink(body.email);

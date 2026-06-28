@@ -18,6 +18,16 @@ const schema = z.object({
   WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
 
+  // Trust the X-Forwarded-* headers from a reverse proxy so req.ip (and thus
+  // the rate-limiter key) reflects the real client, not the proxy. Set this
+  // ONLY when the coordinator actually sits behind a trusted proxy/load
+  // balancer, otherwise clients can spoof X-Forwarded-For to evade limits.
+  //   false (default) — direct exposure, use the socket address.
+  //   true            — trust the immediate upstream (single proxy).
+  //   <number>        — trust N proxy hops.
+  //   <csv of IPs/CIDRs> — trust only these upstream addresses.
+  TRUST_PROXY: z.string().default('false'),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().optional(),
@@ -42,3 +52,21 @@ export const env = schema.parse(process.env);
 export const allowedOrigins = env.ALLOWED_ORIGINS.split(',').map((s) =>
   s.trim(),
 );
+
+/**
+ * Normalize TRUST_PROXY into the shape Fastify's `trustProxy` option accepts:
+ *   "false"/"" -> false   "true" -> true   "2" -> 2 (hop count)
+ *   "10.0.0.0/8,127.0.0.1" -> ["10.0.0.0/8", "127.0.0.1"]
+ */
+function parseTrustProxy(raw: string): boolean | number | string[] {
+  const v = raw.trim();
+  if (v === '' || v.toLowerCase() === 'false') return false;
+  if (v.toLowerCase() === 'true') return true;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export const trustProxy = parseTrustProxy(env.TRUST_PROXY);

@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
-import { env, allowedOrigins } from "./env.ts";
+import { env, allowedOrigins, trustProxy } from "./env.ts";
 import { db } from "./db.ts";
 import { verifySession } from "./auth.ts";
 import type { SessionPayload } from "./auth.ts";
@@ -31,6 +31,9 @@ const app = Fastify({
         : undefined,
   },
   bodyLimit: 10 * 1024 * 1024,
+  // When behind a reverse proxy (set TRUST_PROXY), derive req.ip from
+  // X-Forwarded-For so the rate-limiter keys on the real client, not the proxy.
+  trustProxy,
 });
 
 await app.register(cors, {
