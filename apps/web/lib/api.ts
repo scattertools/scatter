@@ -139,6 +139,13 @@ export const api = {
       auth: session,
     }),
 
+  approveDevice: (userCode: string, session: string) =>
+    request<{ ok: boolean }>('/auth/device/approve', {
+      method: 'POST',
+      json: { userCode },
+      auth: session,
+    }),
+
   stats: () => request<NetworkStats>('/nodes/stats'),
 
   uploadPlan: (manifest: FileManifest, session?: string | null) =>

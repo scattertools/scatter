@@ -36,7 +36,19 @@ function CallbackInner() {
       .then(({ session, user }) => {
         signIn(session, user);
         setStatus('ok');
-        setTimeout(() => router.push('/dashboard'), 500);
+        // Honor a stashed return target (e.g. linking the desktop app),
+        // otherwise land on the dashboard.
+        let dest = '/dashboard';
+        try {
+          const stashed = sessionStorage.getItem('scatter:postSignInRedirect');
+          if (stashed) {
+            dest = stashed;
+            sessionStorage.removeItem('scatter:postSignInRedirect');
+          }
+        } catch {
+          /* sessionStorage unavailable */
+        }
+        setTimeout(() => router.push(dest), 500);
       })
       .catch((e) => {
         setStatus('error');
