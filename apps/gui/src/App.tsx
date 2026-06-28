@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
 import {
@@ -13,11 +13,12 @@ import {
   FiArrowLeft,
   FiUser,
   FiLogOut,
-  FiMail,
   FiKey,
   FiCheck,
   FiSave,
   FiLoader,
+  FiMonitor,
+  FiCopy,
 } from 'react-icons/fi';
 
 const VERSION = '0.1.0';
@@ -45,6 +46,14 @@ interface Account {
   email: string;
   username: string;
   balance: number;
+}
+
+interface DeviceLogin {
+  userCode: string;
+  verificationUrl: string;
+  verificationUrlComplete: string;
+  expiresInMinutes: number;
+  pollIntervalSeconds: number;
 }
 
 type View = 'main' | 'settings' | 'account';
@@ -516,12 +525,14 @@ function AccountView({
   onChange: () => void;
   onBack: () => void;
 }) {
-  const [email, setEmail] = useState('');
-  const [token, setToken] = useState('');
   const [code, setCode] = useState('');
-  const [stage, setStage] = useState<'email' | 'token' | 'code'>('email');
+  const [stage, setStage] = useState<'idle' | 'device' | 'code'>('idle');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Device (OAuth-style) login state.
+  const [device, setDevice] = useState<DeviceLogin | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const [editingName, setEditingName] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
@@ -553,13 +564,55 @@ function AccountView({
     }
   };
 
-  const requestLink = async () => {
-    if (!email.trim()) return;
+  // Poll the backend while a device login is in progress; sign in on approval.
+  const pollTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (stage !== 'device' || !device) return;
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const acct = await invoke<Account | null>('poll_device_login');
+        if (cancelled) return;
+        if (acct) {
+          onChange();
+          return; // signed in — stop polling
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setError(String(e));
+        setStage('idle');
+        setDevice(null);
+        return;
+      }
+      pollTimer.current = window.setTimeout(
+        tick,
+        device.pollIntervalSeconds * 1000,
+      );
+    };
+
+    pollTimer.current = window.setTimeout(
+      tick,
+      device.pollIntervalSeconds * 1000,
+    );
+    return () => {
+      cancelled = true;
+      if (pollTimer.current) window.clearTimeout(pollTimer.current);
+    };
+  }, [stage, device, onChange]);
+
+  const startDeviceLogin = async () => {
     setBusy(true);
     setError(null);
+    setCopied(false);
     try {
-      await invoke('request_login', { email: email.trim() });
-      setStage('token');
+      const d = await invoke<DeviceLogin>('start_device_login');
+      setDevice(d);
+      setStage('device');
+      // Open the verification page (pre-filled with the code) in the browser.
+      open(d.verificationUrlComplete).catch(() => {
+        /* user can open it manually from the shown URL */
+      });
     } catch (e) {
       setError(String(e));
     } finally {
@@ -567,17 +620,14 @@ function AccountView({
     }
   };
 
-  const verify = async () => {
-    if (!token.trim()) return;
-    setBusy(true);
-    setError(null);
+  const copyCode = async () => {
+    if (!device) return;
     try {
-      await invoke<Account>('verify_login', { token: token.trim() });
-      onChange();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
+      await navigator.clipboard.writeText(device.userCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
     }
   };
 
@@ -600,9 +650,8 @@ function AccountView({
     try {
       await invoke('logout');
       onChange();
-      setStage('email');
-      setEmail('');
-      setToken('');
+      setStage('idle');
+      setDevice(null);
       setCode('');
     } finally {
       setBusy(false);
@@ -724,27 +773,26 @@ function AccountView({
             bigger uploads.
           </p>
 
-          {stage === 'email' ? (
+          {stage === 'idle' ? (
             <div className="p-4 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm">
-              <label className="text-xs font-bold uppercase tracking-wider text-scatter-muted mb-2 block">
-                email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && requestLink()}
-                placeholder="you@example.com"
-                className="w-full px-3 py-2 border-2 border-scatter-border bg-scatter-bg font-mono text-sm mb-3 outline-none focus:bg-white"
-              />
               <button
-                onClick={requestLink}
-                disabled={busy || !email.trim()}
+                onClick={startDeviceLogin}
+                disabled={busy}
                 className="brutal-btn w-full px-4 py-3 bg-scatter-primary text-white border-2 border-scatter-border font-bold shadow-brutal flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <FiMail size={18} />{' '}
-                {busy ? 'sending...' : 'send sign-in link'}
+                {busy ? (
+                  <>
+                    <FiLoader size={18} className="animate-spin" /> opening...
+                  </>
+                ) : (
+                  <>
+                    <FiExternalLink size={18} /> sign in with scatter.tools
+                  </>
+                )}
               </button>
+              <p className="text-xs text-scatter-muted mt-2 leading-relaxed">
+                this opens scatter.tools in your browser to approve this device.
+              </p>
               <div className="flex items-center gap-2 my-3 text-xs text-scatter-muted">
                 <div className="flex-1 h-px bg-scatter-border" />
                 or
@@ -757,10 +805,57 @@ function AccountView({
                 }}
                 className="brutal-btn-sm w-full px-4 py-2 bg-scatter-surface border-2 border-scatter-border font-bold text-sm shadow-brutal-sm flex items-center justify-center gap-2"
               >
-                <FiKey size={14} /> use a login code
+                <FiKey size={14} /> enter a login code instead
               </button>
             </div>
-          ) : stage === 'code' ? (
+          ) : stage === 'device' ? (
+            <div className="p-4 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm">
+              <div className="flex items-center gap-2 text-scatter-muted text-xs font-bold uppercase tracking-wider mb-3">
+                <FiMonitor size={14} /> waiting for approval
+              </div>
+              <p className="text-sm mb-3 leading-relaxed">
+                approve this device on scatter.tools. didn&apos;t see a page?
+                open{' '}
+                <button
+                  onClick={() =>
+                    device && open(device.verificationUrl).catch(() => {})
+                  }
+                  className="brutal-link font-bold underline"
+                >
+                  {device?.verificationUrl}
+                </button>{' '}
+                and enter the code below.
+              </p>
+              <label className="text-xs font-bold uppercase tracking-wider text-scatter-muted mb-2 block">
+                your code
+              </label>
+              <div className="flex gap-2 mb-3">
+                <code className="flex-1 px-3 py-2 border-2 border-scatter-border bg-scatter-bg font-mono font-black text-lg tracking-widest text-center select-all">
+                  {device?.userCode}
+                </code>
+                <button
+                  onClick={copyCode}
+                  className="brutal-btn-sm px-3 py-2 bg-scatter-surface border-2 border-scatter-border font-bold shadow-brutal-sm flex items-center gap-2"
+                >
+                  {copied ? <FiCheck size={14} /> : <FiCopy size={14} />}
+                </button>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-sm text-scatter-muted">
+                <FiLoader size={16} className="animate-spin" /> waiting for you
+                to approve...
+              </div>
+              <button
+                onClick={() => {
+                  setStage('idle');
+                  setDevice(null);
+                  setError(null);
+                }}
+                className="brutal-link w-full mt-3 px-4 py-2 font-semibold text-sm"
+              >
+                cancel
+              </button>
+            </div>
+          ) : (
             <div className="p-4 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm">
               <p className="text-sm mb-3 leading-relaxed">
                 already signed in on the web? open{' '}
@@ -789,46 +884,12 @@ function AccountView({
               </button>
               <button
                 onClick={() => {
-                  setStage('email');
+                  setStage('idle');
                   setError(null);
                 }}
                 className="brutal-link w-full mt-2 px-4 py-2 font-semibold text-sm"
               >
-                back to email sign-in
-              </button>
-            </div>
-          ) : (
-            <div className="p-4 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm">
-              <p className="text-sm mb-3 leading-relaxed">
-                check <span className="font-bold">{email}</span> for a sign-in
-                link. open it, then paste the code from the page below.
-              </p>
-              <label className="text-xs font-bold uppercase tracking-wider text-scatter-muted mb-2 block">
-                sign-in code
-              </label>
-              <input
-                type="text"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && verify()}
-                placeholder="paste code here"
-                className="w-full px-3 py-2 border-2 border-scatter-border bg-scatter-bg font-mono text-sm mb-3 outline-none focus:bg-white"
-              />
-              <button
-                onClick={verify}
-                disabled={busy || !token.trim()}
-                className="brutal-btn w-full px-4 py-3 bg-scatter-primary text-white border-2 border-scatter-border font-bold shadow-brutal disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {busy ? 'verifying...' : 'verify & sign in'}
-              </button>
-              <button
-                onClick={() => {
-                  setStage('email');
-                  setError(null);
-                }}
-                className="brutal-link w-full mt-2 px-4 py-2 font-semibold text-sm"
-              >
-                use a different email
+                back
               </button>
             </div>
           )}
