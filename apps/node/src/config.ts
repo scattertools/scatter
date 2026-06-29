@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { z } from 'zod';
 
 const DEFAULT_DATA_DIR = join(homedir(), '.scatter');
