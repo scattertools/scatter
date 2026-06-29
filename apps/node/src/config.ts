@@ -53,9 +53,12 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
     raw = {};
   }
 
+  const rawObject =
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw : {};
+
   const merged = {
     ...defaults,
-    ...(raw as object),
+    ...rawObject,
     dataDir,
     ...(overrides.coordinator !== undefined && {
       coordinator: overrides.coordinator,
