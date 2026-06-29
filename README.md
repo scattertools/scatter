@@ -8,6 +8,7 @@
   <p>
     <a href="https://scatter.tools">scatter.tools</a> ·
     <a href="#getting-started">Get Started</a> ·
+    <a href="#node-cli-reference">CLI</a> ·
     <a href="#how-it-works">How It Works</a> ·
     <a href="#contributing">Contributing</a>
   </p>
@@ -59,7 +60,7 @@ apps/
   web/          Next.js front end — upload, download, auth, dashboard
   coordinator/  Fastify API — assigns shards, relays uploads/downloads, auth + credits
   node/         CLI storage agent (`scatter`) — stores shards, talks to the coordinator
-  gui/          Tauri desktop app for running a node with a UI (in progress)
+  gui/          Tauri desktop app for running a node with a UI
 packages/
   protocol/     Shared core — crypto, Reed-Solomon sharding, manifests, link codecs
 ```
@@ -76,11 +77,15 @@ Prebuilt node binaries are published on the [GitHub Releases page](https://githu
 
 ```bash
 scatter start --storage 50GB --coordinator https://scatter.tools
-scatter status   # show this machine's node config + link state
-scatter reset    # forget the node ID (re-registers on next start)
+scatter login                       # link to your account and earn credits
+scatter status                      # config, link state, and credit balance
 ```
 
 Config and shards live in `~/.scatter` by default (override with `--data-dir`).
+
+The CLI is fully featured — it does everything the desktop GUI does (running a
+node, account sign-in, credits, settings). See the [Node CLI Reference](#node-cli-reference)
+for every command.
 
 Prefer to build it yourself? See [Building from Source](#building-from-source).
 
@@ -140,11 +145,12 @@ pnpm dev:node -- --storage 50GB
 
 # Or, after building, run the compiled `scatter` binary directly:
 scatter start --storage 50GB --coordinator http://localhost:4000
-scatter status   # show this machine's node config + link state
-scatter reset    # forget the node ID (re-registers on next start)
+scatter login                       # link this node to your account
+scatter status                      # config, link state, and credit balance
 ```
 
 Config and shards live in `~/.scatter` by default (override with `--data-dir`).
+The CLI exposes the full feature set — see the [Node CLI Reference](#node-cli-reference).
 
 > Don't want to build it? Grab a prebuilt binary from the
 > [GitHub Releases page](https://github.com/scattertools/scatter/releases) instead.
@@ -155,7 +161,10 @@ Config and shards live in `~/.scatter` by default (override with `--data-dir`).
 pnpm dev:app
 ```
 
-A [Tauri](https://tauri.app) app that runs a node with a desktop UI instead of the CLI.
+A [Tauri](https://tauri.app) app that runs a node with a desktop UI. It is
+feature-equivalent to the CLI — anything you can do in the GUI (sign in, set
+storage, switch coordinator, view credits) you can also do from the
+[`scatter` command](#node-cli-reference), and vice versa.
 
 ### Run the Full Stack with Docker
 
@@ -169,6 +178,117 @@ docker compose up -d --build
 
 The `node` agent and `gui` desktop app are intentionally not containerized — run those
 locally as shown above.
+
+## Node CLI Reference
+
+The `scatter` command-line node is a full-featured client — it can do everything
+the desktop GUI does: run a shard-serving node, sign in to your account, manage
+credits, and adjust settings. It runs headless, which makes it ideal for servers,
+Raspberry Pis, and [background services](apps/node/service/README.md).
+
+All state (config + shards) lives under `~/.scatter`. Every command accepts
+`--data-dir <path>` to use a different location, which lets you run multiple
+independent nodes on one machine.
+
+### Quick start
+
+```bash
+scatter start --storage 50GB --coordinator https://scatter.tools  # run the node
+scatter login                                                     # link your account
+scatter status                                                    # see everything
+```
+
+`scatter start` runs in the foreground and streams an activity log (shards
+stored/served, reconnects, errors). Stop it with `Ctrl-C`. To run it unattended,
+install it as an OS service — see [apps/node/service](apps/node/service/README.md)
+for systemd / launchd / Windows templates.
+
+### Commands
+
+| Command | What it does |
+| ------- | ------------ |
+| `start` | Start the node and serve shards (foreground). |
+| `status` | Show config, link state, and — when signed in — your account + credit balance. |
+| `login` | Link this node to your Scatter account (browser device flow). |
+| `login --code <code>` | Sign in with a one-time login code from the web account settings. |
+| `logout` | Unlink this node from your account. |
+| `account` (alias `whoami`) | Show the linked account email, username, and credit balance. |
+| `username <name>` | Set your account username (3–24 chars: letters, numbers, `-`, `_`). |
+| `set-storage <size>` | Change the storage allocation (e.g. `100GB`). Applies on the next heartbeat. |
+| `set-coordinator <url>` | Point the node at a different coordinator. Restart to take effect. |
+| `reset` | Forget the node ID + token (re-registers on next `start`). |
+
+Run `scatter --help` or `scatter <command> --help` for the full flag list.
+
+### `start`
+
+```bash
+scatter start [options]
+```
+
+| Flag | Description | Default |
+| ---- | ----------- | ------- |
+| `--storage <size>` | Disk to allocate for others' shards, e.g. `50GB`, `512MB`, `1TB`. | `10GB` |
+| `--coordinator <url>` | Coordinator API URL. | `http://localhost:4000` |
+| `--port <n>` | Local HTTP port. | `7878` |
+| `--data-dir <path>` | Where config + shards live. | `~/.scatter` |
+
+Flags passed to `start` are persisted, so you only need to set them once.
+On first start the node registers itself with the coordinator and saves its
+node ID + token; if you ran `scatter login` first, the node is bound to your
+account so you earn credits for the storage you contribute.
+
+### Signing in & credits
+
+Running a node earns **credits**, which you spend on larger uploads. Link the
+node to your account to collect them. Two ways to sign in:
+
+```bash
+# Browser device flow — opens a verification URL and a short code to confirm.
+scatter login
+
+# Already signed in on the web? Generate a one-time code in your account
+# settings on scatter.tools and paste it:
+scatter login --code ABCD-1234-EFGH
+```
+
+Then check your balance any time:
+
+```bash
+scatter account        # email, username, credits
+scatter username alice # claim a username
+scatter logout         # unlink
+```
+
+### Changing settings
+
+```bash
+scatter set-storage 100GB                          # grow/shrink your allocation
+scatter set-coordinator https://my-coordinator.example  # self-hosted instance
+```
+
+`set-storage` takes effect on the next heartbeat (~30s) — no restart needed.
+`set-coordinator` requires a node restart.
+
+### Output & scripting
+
+`status` and `account` accept `--json` for machine-readable output:
+
+```bash
+scatter status --json | jq .account.credits
+```
+
+Colour is auto-disabled when output isn't a TTY, or set `NO_COLOR=1`.
+
+### Running multiple nodes
+
+Because all state is scoped to `--data-dir`, you can run several nodes side by
+side:
+
+```bash
+scatter start --data-dir ~/.scatter-a --port 7878 --storage 20GB
+scatter start --data-dir ~/.scatter-b --port 7879 --storage 20GB
+```
 
 ## Roadmap
 
