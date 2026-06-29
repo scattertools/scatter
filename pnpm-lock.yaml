@@ -113,7 +113,7 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       ws:
-        specifier: ^8.21.0
+        specifier: '>=8.21.0'
         version: 8.21.0
       zod:
         specifier: ^3.24.1
