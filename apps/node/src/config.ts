@@ -91,7 +91,9 @@ export function parseSize(s: string): number {
     T: 1024 ** 4,
     TB: 1024 ** 4,
   };
-  return Math.floor(num * (multipliers[unit] ?? 1));
+  const multiplier = multipliers[unit];
+  if (multiplier === undefined) throw new Error(`Unknown size unit: ${unit}`);
+  return Math.floor(num * multiplier);
 }
 
 export function formatSize(bytes: number): string {
