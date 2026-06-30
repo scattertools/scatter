@@ -30,8 +30,8 @@ function delay(ms: number): Promise<void> {
 
 /**
  * Register with the coordinator, retrying with exponential backoff so a
- * transient outage at startup does not crash the node. After exhausting all
- * attempts the final error is rethrown for the caller to handle as fatal.
+ * transient startup outage does not crash the node. Rethrows after exhausting
+ * all attempts.
  */
 async function registerWithRetry(
   coordinator: CoordinatorClient,
@@ -77,8 +77,7 @@ export async function startDaemon(config: Config): Promise<Daemon> {
   const coordinator = new CoordinatorClient(config.coordinator);
   const events = new Events();
 
-  // Register if we have no node id, or if we have an id but are missing a
-  // node token (existing installs from before token auth). In either case the
+  // Register when missing a node id or token (pre-token-auth installs); the
   // coordinator issues a fresh node row + token.
   if (!config.nodeId || !config.nodeToken) {
     const { nodeId, nodeToken } = await registerWithRetry(
@@ -97,9 +96,8 @@ export async function startDaemon(config: Config): Promise<Daemon> {
 
   coordinator.nodeToken = config.nodeToken!;
 
-  // The storage index is the single source of truth for usage counters. The
-  // `state` object reads through to it so usedBytes/shardCount stay correct
-  // across both store and delete with no drift and no directory walks.
+  // The storage index is the source of truth for usage counters; `state` reads
+  // through to it so usedBytes/shardCount stay correct with no drift.
   const startedAt = Date.now();
   const state = {
     startedAt,
@@ -111,7 +109,6 @@ export async function startDaemon(config: Config): Promise<Daemon> {
     },
   };
 
-  // WebSocket client
   const ws = new NodeWSClient({
     coordinatorUrl: config.coordinator,
     nodeId: config.nodeId!,
@@ -124,7 +121,7 @@ export async function startDaemon(config: Config): Promise<Daemon> {
   });
   ws.start();
 
-  // Heartbeat loop (still useful — tells coordinator we're alive even between WS messages)
+  // Heartbeat loop — tells the coordinator we're alive between WS messages.
   const heartbeat = async () => {
     try {
       await coordinator.heartbeat(config.nodeId!, {

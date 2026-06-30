@@ -1,40 +1,28 @@
 /**
- * Scatter crypto layer.
- * - AES-256-GCM encryption
- * - Key is random 256 bits, shared via URL fragment (never hits server)
- * - The AES-GCM key is DERIVED from key.raw + a per-file salt via HKDF-SHA-256
- *   (protocol v2). Decrypt reproduces the same key from key.raw + salt only.
- * - TRUE streaming: encrypt/decrypt read the source Blob slice-by-slice so the
- *   whole plaintext + whole ciphertext are never both held in JS memory.
+ * Scatter crypto layer: AES-256-GCM with HKDF-SHA-256 key derivation
+ * (key.raw + per-file salt) and true streaming so plaintext and ciphertext
+ * are never both fully held in memory. Key shared via URL fragment (see links.ts).
  */
 
 const KEY_LENGTH_BITS = 256;
 const IV_LENGTH_BYTES = 12;
-const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB chunks
+const CHUNK_SIZE = 4 * 1024 * 1024;
 
-// HKDF info label binding the derived key to this protocol/version.
 const HKDF_INFO = new TextEncoder().encode('scatter-file-key-v2');
 
-// TS 5.7+ types `new Uint8Array(...)` / WebCrypto outputs as
-// `Uint8Array<ArrayBufferLike>`, which is not assignable to the
-// `ArrayBuffer`-backed `BufferSource`/`BlobPart` that WebCrypto + Blob expect.
-// In every runtime we target the backing store IS a plain ArrayBuffer, so this
-// narrowing cast is safe and keeps the boundary code readable.
+// Narrows TS 5.7+ Uint8Array<ArrayBufferLike> to the ArrayBuffer-backed
+// BufferSource/BlobPart WebCrypto + Blob expect; safe in our target runtimes.
 function ab(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return bytes as Uint8Array<ArrayBuffer>;
 }
 
 /**
- * Per-chunk Additional Authenticated Data (AAD).
- * Format: 8-byte big-endian chunk index (counter starting at 0).
- * Binding the index into GCM means chunks cannot be silently reordered,
- * duplicated, or truncated — decrypt re-derives the same AAD from its running
- * chunk counter and GCM authentication fails on any mismatch.
+ * Per-chunk AES-GCM AAD: 8-byte big-endian chunk index. Binding the index
+ * prevents silent reorder/duplication/truncation — decrypt re-derives it and
+ * GCM auth fails on mismatch.
  */
 function chunkAad(index: number): Uint8Array<ArrayBuffer> {
   const aad = new Uint8Array(8);
-  // Big-endian 64-bit counter via two 32-bit halves (index stays well within
-  // Number-safe range for any realistic file size).
   const view = new DataView(aad.buffer);
   view.setUint32(0, Math.floor(index / 0x100000000), false);
   view.setUint32(4, index >>> 0, false);
@@ -42,8 +30,8 @@ function chunkAad(index: number): Uint8Array<ArrayBuffer> {
 }
 
 export interface EncryptionKey {
-  raw: Uint8Array; // 32 bytes
-  base64Url: string; // URL-safe for link fragments
+  raw: Uint8Array;
+  base64Url: string;
 }
 
 export async function generateKey(): Promise<EncryptionKey> {
@@ -63,12 +51,9 @@ export function keyFromBase64Url(s: string): EncryptionKey {
 }
 
 /**
- * Derive the AES-256-GCM key from the raw 256-bit key material + per-file salt
- * using HKDF-SHA-256. Reproducible at decrypt time from key.raw + salt only.
- *   hash:  SHA-256
- *   salt:  per-file 16-byte salt (from manifest.encryption.salt)
- *   info:  'scatter-file-key-v2'
- *   usage: ['encrypt', 'decrypt'] as a 256-bit AES-GCM key
+ * Derive the AES-256-GCM key from raw key material + per-file salt via
+ * HKDF-SHA-256, reproducible at decrypt time. Salt comes from
+ * manifest.encryption.salt (see types.ts), info label HKDF_INFO.
  */
 async function deriveKey(
   raw: Uint8Array,
@@ -90,9 +75,8 @@ async function deriveKey(
   );
 }
 
-/** Read ONLY the given Blob slice's bytes. Uses FileReader where available
- * (often faster in browsers), falling back to Blob.arrayBuffer() elsewhere
- * (e.g. Node, where FileReader may not be a global). */
+/** Read a Blob slice's bytes, preferring FileReader and falling back to
+ * Blob.arrayBuffer() where FileReader is absent (e.g. Node). */
 async function readBlob(blob: Blob): Promise<Uint8Array> {
   if (typeof FileReader === 'undefined') {
     return new Uint8Array(await blob.arrayBuffer());
@@ -112,12 +96,9 @@ async function readBlob(blob: Blob): Promise<Uint8Array> {
 }
 
 /**
- * Encrypt a Blob in chunks, TRUE streaming.
- * Reads the source slice-by-slice (blob.slice -> that slice's bytes only),
- * never materializing the whole plaintext or whole ciphertext at once.
- * Wire format per chunk (unchanged from v1):
- *   [4-byte BE length of ciphertext][12-byte IV][ciphertext+GCM tag]
- * Each chunk's GCM call binds AAD = chunkAad(chunkIndex) (see chunkAad).
+ * Encrypt a Blob in chunks via true streaming. Per-chunk wire format:
+ * [4-byte BE ciphertext length][12-byte IV][ciphertext+GCM tag], with
+ * AAD = chunkAad(chunkIndex). Decrypted by decryptStream.
  */
 export async function encryptStream(
   source: Blob,
@@ -150,7 +131,7 @@ export async function encryptStream(
     chunkIndex++;
   }
 
-  // Empty-file behavior preserved: emit exactly one empty-plaintext chunk.
+  // Empty file: emit exactly one empty-plaintext chunk.
   if (parts.length === 0) {
     const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH_BYTES));
     const ciphertext = new Uint8Array(
@@ -171,11 +152,8 @@ export async function encryptStream(
 }
 
 /**
- * Decrypt a blob produced by encryptStream, TRUE streaming.
- * Parses the framed blob by reading ONLY the bytes needed per chunk via
- * blob.slice(...).arrayBuffer() — first the 4-byte length header, then the
- * iv+ciphertext slice — never calling source.arrayBuffer() on the whole blob.
- * Re-derives the same AAD = chunkAad(chunkIndex) from the running counter.
+ * Decrypt a blob produced by encryptStream via true streaming, reading only
+ * the bytes needed per chunk and re-deriving AAD = chunkAad(chunkIndex).
  */
 export async function decryptStream(
   source: Blob,
@@ -238,8 +216,7 @@ export async function sha256Hex(data: Uint8Array): Promise<string> {
     .join('');
 }
 
-// --- base64url helpers (work in both browser and node) ---
-
+/** base64url encode (browser btoa or Node Buffer fallback). */
 export function base64UrlEncode(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.length; i++)
@@ -251,6 +228,7 @@ export function base64UrlEncode(bytes: Uint8Array): string {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** base64url decode (browser atob or Node Buffer fallback). */
 export function base64UrlDecode(s: string): Uint8Array {
   const b64 =
     s.replace(/-/g, '+').replace(/_/g, '/') +
@@ -264,8 +242,8 @@ export function base64UrlDecode(s: string): Uint8Array {
   return new Uint8Array(nodeBuffer().from(b64, 'base64'));
 }
 
-// Node-only Buffer fallback, accessed via globalThis so this file needs no
-// @types/node and stays browser-safe (browsers take the btoa/atob path above).
+// Node Buffer accessed via globalThis so this file needs no @types/node
+// and stays browser-safe.
 interface NodeBufferLike {
   from(input: Uint8Array | string, encoding?: string): {
     toString(encoding: string): string;

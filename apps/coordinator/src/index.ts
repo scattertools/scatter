@@ -31,8 +31,6 @@ const app = Fastify({
         : undefined,
   },
   bodyLimit: 10 * 1024 * 1024,
-  // When behind a reverse proxy (set TRUST_PROXY), derive req.ip from
-  // X-Forwarded-For so the rate-limiter keys on the real client, not the proxy.
   trustProxy,
 });
 
@@ -47,7 +45,7 @@ await app.register(rateLimit, {
 });
 
 await app.register(websocket, {
-  options: { maxPayload: 16 * 1024 * 1024 }, // up to 16 MB per WS message
+  options: { maxPayload: 16 * 1024 * 1024 },
 });
 
 app.addHook("onRequest", async (req) => {

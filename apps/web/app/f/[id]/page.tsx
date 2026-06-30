@@ -137,9 +137,7 @@ export default function DownloadPage({
           {(state === 'ready' || state === 'downloading' || state === 'done') &&
             manifest && (
               <>
-                {/* Main card */}
                 <div className="border-2 border-scatter-border bg-scatter-surface shadow-brutal">
-                  {/* File info header */}
                   <div className="p-6 border-b-2 border-scatter-border">
                     <div className="flex items-start gap-4">
                       <div className="p-3 border-2 border-scatter-border bg-scatter-bg">
@@ -156,7 +154,6 @@ export default function DownloadPage({
                     </div>
                   </div>
 
-                  {/* File details - user friendly */}
                   <div className="p-6 border-b-2 border-scatter-border bg-scatter-bg/50">
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div className="flex items-center gap-2">
@@ -180,7 +177,6 @@ export default function DownloadPage({
                     </p>
                   </div>
 
-                  {/* Progress */}
                   {progress && (
                     <div className="p-6 border-b-2 border-scatter-border">
                       <div className="flex items-center justify-between text-sm font-bold mb-2">
@@ -198,7 +194,6 @@ export default function DownloadPage({
                     </div>
                   )}
 
-                  {/* Action */}
                   <div className="p-6">
                     {state === 'done' ? (
                       <div className="text-center">
@@ -239,7 +234,6 @@ export default function DownloadPage({
                   </div>
                 </div>
 
-                {/* Info footer */}
                 <div className="mt-4 p-4 border-2 border-scatter-border bg-scatter-surface text-center text-sm text-scatter-muted">
                   <p>
                     the decryption key is in your URL — we can&apos;t read this file.{' '}

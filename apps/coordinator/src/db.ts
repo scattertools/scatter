@@ -10,22 +10,13 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('synchronous = NORMAL');
 
-// =============================================================================
-// Versioned migrations
+// Versioned migrations tracked via SQLite's `PRAGMA user_version`. On startup
+// every migration past the current version runs in order, each in its own
+// transaction, then bumps user_version.
 //
-// We track schema state with SQLite's built-in `PRAGMA user_version` (an
-// integer stored in the database header). On startup we run every migration
-// whose index is greater than the current user_version, in order, each inside
-// its own transaction, then bump user_version. This replaces the previous
-// ad-hoc `CREATE TABLE IF NOT EXISTS` + hand-rolled ALTER approach and gives a
-// deterministic, ordered upgrade path for databases carrying real data.
-//
-// RULES for adding a migration:
-//   - Append a new entry to the end of the array. NEVER edit or reorder an
-//     already-released migration — existing databases have already applied it.
-//   - Keep each migration self-contained and idempotent where practical.
-//   - The array index + 1 is the version the migration advances the db TO.
-// =============================================================================
+// To add a migration: append to the end of the array (never edit/reorder a
+// released one), keep it self-contained/idempotent. Array index + 1 is the
+// version it advances the db to.
 
 type Migration = {
   name: string;
@@ -64,9 +55,8 @@ const migrations: Migration[] = [
         );
         CREATE INDEX IF NOT EXISTS idx_login_codes_expires ON login_codes(expires_at);
 
-        -- Device authorization flow (OAuth-style): the desktop app starts a
-        -- pending session keyed by a secret device_code it polls, plus a short
-        -- user_code the person approves in the browser while signed in on web.
+        -- OAuth-style device authorization: the desktop app polls a secret
+        -- device_code while the person approves a short user_code in-browser.
         CREATE TABLE IF NOT EXISTS device_codes (
           device_code  TEXT PRIMARY KEY,
           user_code    TEXT NOT NULL UNIQUE,
@@ -134,10 +124,8 @@ const migrations: Migration[] = [
   {
     name: '0002_users_username',
     up: (d) => {
-      // `CREATE TABLE IF NOT EXISTS` never alters an existing table, so add the
-      // username column (and backfill it) for databases created before it
-      // existed. The column check keeps this safe on databases where 0001
-      // already created `users` with the column present.
+      // `CREATE TABLE IF NOT EXISTS` never alters an existing table, so add
+      // and backfill username for databases created before it existed.
       const userColumns = d
         .prepare<[], { name: string }>(`PRAGMA table_info(users)`)
         .all() as Array<{ name: string }>;
@@ -145,8 +133,6 @@ const migrations: Migration[] = [
         d.exec(`ALTER TABLE users ADD COLUMN username TEXT`);
       }
 
-      // Backfill any user missing a username with the local-part of their
-      // email, de-duplicated by appending a short suffix derived from their id.
       const needsUsername = d
         .prepare<[], { id: string; email: string }>(
           `SELECT id, email FROM users WHERE username IS NULL OR username = ''`,
@@ -174,8 +160,7 @@ const migrations: Migration[] = [
 
 /**
  * Apply every migration newer than the database's current user_version, each
- * in its own transaction. Idempotent: re-running with no pending migrations is
- * a no-op. Exported so tests can run it against an in-memory database.
+ * in its own transaction. Idempotent; exported so tests can run it in-memory.
  */
 export function runMigrations(database: Database.Database): void {
   const current = database.pragma('user_version', { simple: true }) as number;
@@ -189,7 +174,6 @@ export function runMigrations(database: Database.Database): void {
     const migration = migrations[version];
     const apply = database.transaction(() => {
       migration.up(database);
-      // user_version can't be parameterized; version+1 is a trusted integer.
       database.pragma(`user_version = ${version + 1}`);
     });
     apply();

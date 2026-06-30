@@ -10,12 +10,8 @@ interface Candidate {
 const ONLINE_WINDOW_MS = 2 * 60_000;
 
 /**
- * Pick nodes for shards.
- * - Prefers distinct nodes (one shard per node) for redundancy
- * - Falls back to reusing nodes if there aren't enough distinct ones
- *   (with env.ALLOW_SHARD_STACKING enabled, useful for dev)
- *
- * Returns an array of nodeIds, length = `count`.
+ * Pick `count` nodeIds to host shards. Prefers distinct nodes for redundancy,
+ * falling back to reuse when ALLOW_SHARD_STACKING is set (dev).
  */
 export function pickNodesForShards(shardSize: number, count: number): string[] {
   const cutoff = Date.now() - ONLINE_WINDOW_MS;
@@ -34,13 +30,11 @@ export function pickNodesForShards(shardSize: number, count: number): string[] {
     throw new Error('No nodes online');
   }
 
-  // Preferred case: enough distinct nodes
   if (candidates.length >= count) {
     const shuffled = [...candidates].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count).map((c) => c.id);
   }
 
-  // Fallback: not enough distinct nodes
   if (!env.ALLOW_SHARD_STACKING) {
     throw new Error(
       `Not enough nodes online: need ${count}, have ${candidates.length}. ` +
@@ -48,7 +42,6 @@ export function pickNodesForShards(shardSize: number, count: number): string[] {
     );
   }
 
-  // Verify total free space is enough
   const totalFree = candidates.reduce((sum, c) => sum + c.free_bytes, 0);
   const totalNeeded = shardSize * count;
   if (totalFree < totalNeeded) {
@@ -57,7 +50,6 @@ export function pickNodesForShards(shardSize: number, count: number): string[] {
     );
   }
 
-  // Round-robin across available nodes
   const out: string[] = [];
   for (let i = 0; i < count; i++) {
     out.push(candidates[i % candidates.length].id);

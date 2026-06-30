@@ -168,7 +168,6 @@ function App() {
         onSettings={() => setView('settings')}
       />
 
-      {/* Connection status */}
       <div
         className={`mb-3 p-4 border-2 border-scatter-border shadow-brutal-sm ${
           state.connected ? 'bg-scatter-primary/10' : 'bg-scatter-surface'
@@ -215,7 +214,6 @@ function App() {
         </div>
       </div>
 
-      {/* Storage */}
       <div className="mb-3 p-4 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm">
         <div className="flex items-center gap-2 mb-2">
           <FiHardDrive size={14} className="text-scatter-muted" />
@@ -241,7 +239,6 @@ function App() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-3">
         <StatBox label="shards" value={state.shardCount.toLocaleString()} />
         <StatBox label="uptime" value={formatUptime(state.uptimeSeconds)} />
@@ -252,7 +249,6 @@ function App() {
         />
       </div>
 
-      {/* Activity */}
       <div className="flex-1 border-2 border-scatter-border bg-scatter-surface shadow-brutal-sm overflow-hidden flex flex-col">
         <div className="px-3 py-2 border-b-2 border-scatter-border bg-scatter-bg">
           <span className="text-xs font-bold uppercase tracking-wider text-scatter-muted">
@@ -297,7 +293,6 @@ function App() {
         </div>
       </div>
 
-      {/* Footer */}
       <div className="mt-3 flex items-center justify-between text-xs text-scatter-muted">
         <span className="font-mono">scatter v{VERSION}</span>
         <button

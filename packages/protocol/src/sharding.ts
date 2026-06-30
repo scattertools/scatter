@@ -1,13 +1,12 @@
 /**
- * Reed-Solomon erasure coding over GF(2^8).
- * Splits data into N shards where any K can reconstruct the original.
- * Minimal implementation — not the fastest but correct and dependency-free.
+ * Reed-Solomon erasure coding over GF(2^8): splits data into N shards where
+ * any K reconstruct the original. Minimal, dependency-free implementation.
  */
 
 import type { ShardConfig, ShardInfo } from './types.ts';
 import { sha256Hex } from './crypto.ts';
 
-// --- GF(256) arithmetic using 0x11d primitive polynomial ---
+// GF(256) arithmetic using the 0x11d primitive polynomial.
 const GF_EXP = new Uint8Array(512);
 const GF_LOG = new Uint8Array(256);
 
@@ -31,10 +30,8 @@ const gfDiv = (a: number, b: number): number => {
   return GF_EXP[(GF_LOG[a] - GF_LOG[b] + 255) % 255];
 };
 
-// Build a Cauchy-like matrix for encoding. Rows = dataShards + parityShards, cols = dataShards.
+/** Build the encode matrix: identity rows for data, Vandermonde rows for parity. */
 function buildMatrix(dataShards: number, totalShards: number): Uint8Array[] {
-  // Top = identity (so first dataShards rows are unchanged data),
-  // bottom = Vandermonde rows for parity.
   const rows: Uint8Array[] = [];
   for (let i = 0; i < dataShards; i++) {
     const row = new Uint8Array(dataShards);
@@ -53,6 +50,7 @@ function buildMatrix(dataShards: number, totalShards: number): Uint8Array[] {
   return rows;
 }
 
+/** Gauss-Jordan matrix inversion over GF(256). */
 function invertMatrix(m: Uint8Array[]): Uint8Array[] {
   const n = m.length;
   const a = m.map((r) => new Uint8Array(r));
@@ -63,7 +61,6 @@ function invertMatrix(m: Uint8Array[]): Uint8Array[] {
     inv.push(r);
   }
   for (let col = 0; col < n; col++) {
-    // Find pivot
     let pivot = col;
     while (pivot < n && a[pivot][col] === 0) pivot++;
     if (pivot === n) throw new Error('Singular matrix');
@@ -71,13 +68,11 @@ function invertMatrix(m: Uint8Array[]): Uint8Array[] {
       [a[col], a[pivot]] = [a[pivot], a[col]];
       [inv[col], inv[pivot]] = [inv[pivot], inv[col]];
     }
-    // Normalize row
     const pv = a[col][col];
     for (let j = 0; j < n; j++) {
       a[col][j] = gfDiv(a[col][j], pv);
       inv[col][j] = gfDiv(inv[col][j], pv);
     }
-    // Eliminate other rows
     for (let r = 0; r < n; r++) {
       if (r === col) continue;
       const f = a[r][col];
@@ -91,10 +86,7 @@ function invertMatrix(m: Uint8Array[]): Uint8Array[] {
   return inv;
 }
 
-/**
- * Encode data into shards.
- * Data is zero-padded to be divisible by dataShards.
- */
+/** Encode data into data + parity shards, zero-padded to divide by dataShards. */
 export function encodeShards(
   data: Uint8Array,
   config: ShardConfig,
@@ -102,7 +94,6 @@ export function encodeShards(
   const { dataShards, parityShards } = config;
   const totalShards = dataShards + parityShards;
 
-  // Each shard has length ceil(data.length / dataShards)
   const shardLen = Math.ceil(data.length / dataShards);
   const padded = new Uint8Array(shardLen * dataShards);
   padded.set(data);
@@ -129,8 +120,8 @@ export function encodeShards(
 }
 
 /**
- * Reconstruct original data from any `dataShards` of the shards.
- * `shards` array must have length totalShards; missing shards = null.
+ * Reconstruct original data from any `dataShards` of the shards. `shards` must
+ * have length totalShards; missing shards are null. Trims to originalSize.
  */
 export function decodeShards(
   shards: (Uint8Array | null)[],
@@ -153,7 +144,6 @@ export function decodeShards(
     );
   }
 
-  // Quick path: all data shards present
   const allDataPresent = presentIndices.every((i) => i < dataShards);
   const shardLen = shards[presentIndices[0]]!.length;
 
@@ -161,7 +151,6 @@ export function decodeShards(
   if (allDataPresent) {
     dataRows = presentIndices.slice(0, dataShards).map((i) => shards[i]!);
   } else {
-    // Build submatrix from the rows corresponding to present shards, invert.
     const full = buildMatrix(dataShards, totalShards);
     const sub = presentIndices.map((i) => full[i]);
     const inv = invertMatrix(sub);
@@ -184,7 +173,7 @@ export function decodeShards(
   return out.slice(0, originalSize);
 }
 
-/** Hash every shard — used to build the manifest. */
+/** Hash every shard to build manifest ShardInfo entries (see types.ts). */
 export async function hashShards(
   shards: Uint8Array[],
   dataShards: number,

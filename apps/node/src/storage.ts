@@ -5,8 +5,7 @@ import { createHash } from 'crypto';
 interface ShardIndex {
   usedBytes: number;
   shardCount: number;
-  // per-shard sizes keyed by `${fileId}_${shardIndex}`
-  sizes: Record<string, number>;
+  sizes: Record<string, number>; // keyed by `${fileId}_${shardIndex}`
 }
 
 const INDEX_VERSION = 1;
@@ -73,10 +72,8 @@ export class ShardStorage {
         this.indexLoaded = true;
         return;
       }
-      // shape invalid -> rebuild
       await this.rebuildIndex();
     } catch {
-      // missing or corrupt -> rebuild
       await this.rebuildIndex();
     }
     this.indexLoaded = true;
@@ -139,7 +136,7 @@ export class ShardStorage {
     const key = this.key(fileId, shardIndex);
     const incomingSize = data.length;
     const existingSize = this.index.sizes[key];
-    // Only the net delta counts toward the capacity limit when overwriting.
+    // Only the net delta counts toward capacity when overwriting.
     const delta =
       existingSize === undefined ? incomingSize : incomingSize - existingSize;
 
@@ -155,7 +152,6 @@ export class ShardStorage {
     });
     await fs.writeFile(path, data);
 
-    // Update counters after a successful write.
     if (existingSize === undefined) {
       this.index.shardCount++;
     }
@@ -195,7 +191,6 @@ export class ShardStorage {
       throw e;
     }
 
-    // Subtract the removed file's size without a stat call.
     const removedSize = this.index.sizes[key];
     if (removedSize !== undefined) {
       this.index.usedBytes = Math.max(0, this.index.usedBytes - removedSize);

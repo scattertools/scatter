@@ -104,9 +104,8 @@ export default function Home() {
           fileSize: file.size,
         }),
       );
-      // Persist the full link (with the #key fragment) so the dashboard can
-      // offer a working copy-link across sessions — the key is never on the
-      // server, so the client is the only place it can come from.
+      // Persist the full link (with #key fragment) so the dashboard can offer a
+      // working copy-link; the key is never on the server.
       try {
         localStorage.setItem(`scatter.links.${prep.fileId}`, prep.link);
       } catch {
@@ -258,7 +257,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Live stats */}
         <div className="mt-8 grid grid-cols-3 gap-0 border-2 border-scatter-border bg-scatter-surface shadow-brutal">
           <Stat
             label="people helping"

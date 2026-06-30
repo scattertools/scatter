@@ -18,7 +18,7 @@ export async function uploadShards(
   const total = prep.shards.reduce((s, shard) => s + shard.length, 0);
   let sent = 0;
 
-  // Upload shards in parallel — but cap concurrency so we don't blow up the coordinator
+  // Upload shards in parallel, capping concurrency to spare the coordinator.
   const CONCURRENCY = 3;
   const queue = prep.shards.map((data, i) => ({
     data,
@@ -72,9 +72,8 @@ export async function uploadShards(
   await Promise.all(workers);
 }
 
-// Copy the shard into a plain ArrayBuffer-backed view so it satisfies BodyInit
-// (the protocol's Uint8Array is generic over ArrayBufferLike, which includes
-// SharedArrayBuffer and is therefore not directly assignable to BodyInit).
+// Copy into a plain ArrayBuffer-backed view so it satisfies BodyInit (the
+// protocol's Uint8Array is generic over ArrayBufferLike).
 function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(data.length);
   copy.set(data);

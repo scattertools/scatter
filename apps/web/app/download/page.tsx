@@ -38,14 +38,10 @@ interface LatestRelease {
   assets: ReleaseAsset[];
 }
 
-// Resolved download links per platform, derived from the latest release's
-// assets. A platform maps to null when the release has no matching installer.
+// Per-platform download links; null when the release has no matching installer.
 type Downloads = Record<Platform, { url: string; name: string } | null>;
 
-// Match the Tauri bundle filenames (bundle.targets: "all") to a platform.
-// macOS  -> .dmg          (aarch64 = Apple Silicon, x64/x86_64 = Intel)
-// Windows -> *-setup.exe (NSIS, preferred) or .msi
-// Linux  -> .AppImage (preferred, portable) or .deb
+/** Map Tauri bundle filenames (bundle.targets: "all") to a platform. */
 function resolveDownloads(assets: ReleaseAsset[]): Downloads {
   const find = (pred: (n: string) => boolean) => {
     const a = assets.find((x) => pred(x.name.toLowerCase()));
@@ -53,7 +49,6 @@ function resolveDownloads(assets: ReleaseAsset[]): Downloads {
   };
 
   const mac =
-    // Prefer Apple Silicon; fall back to Intel, then any .dmg.
     find((n) => n.endsWith('.dmg') && n.includes('aarch64')) ??
     find((n) => n.endsWith('.dmg') && (n.includes('x64') || n.includes('x86_64'))) ??
     find((n) => n.endsWith('.dmg'));
@@ -69,21 +64,17 @@ function resolveDownloads(assets: ReleaseAsset[]): Downloads {
   return { mac, windows, linux };
 }
 
-// The auto-detected platform is a client-only value (navigator.userAgent), so
-// it's read via useSyncExternalStore to avoid a hydration mismatch (server
-// renders the 'mac' fallback). It never changes, so the store never re-emits.
+// Auto-detected platform is client-only (navigator.userAgent), read via
+// useSyncExternalStore to avoid a hydration mismatch. It never changes.
 function subscribePlatform() {
   return () => {};
 }
 
-// The current shipped version. Used to build direct-download URLs WITHOUT the
-// GitHub API, so downloads work even if the API is rate-limited (60 req/hr/IP)
-// or unreachable. Bump this when cutting a release (see RELEASE.md).
+// Known shipped version used to build direct-download URLs WITHOUT the GitHub
+// API, so downloads survive rate limits (60 req/hr/IP). Bump on release.
 const FALLBACK_VERSION = '0.1.0';
 
-// Tauri's bundle filenames embed the version, so we can construct stable
-// per-platform download URLs from a known version. These resolve directly off
-// the published release without any API call.
+/** Build stable per-platform download URLs from a known version (no API call). */
 function downloadsForVersion(version: string): Downloads {
   const v = version.replace(/^v/, '');
   const dl = (name: string) => ({
@@ -113,17 +104,15 @@ export default function DownloadApp() {
   const platform = override ?? detected;
   const setPlatform = setOverride;
 
-  // Start from the known shipped version so the page ALWAYS offers working
-  // downloads, even before (or without) the API call. The fetch below only
-  // upgrades this to the live latest release + exact asset filenames.
+  // Start from the known version so working downloads are always offered; the
+  // fetch below upgrades to the live latest release + exact asset filenames.
   const [release, setRelease] = useState<ReleaseState>({
     version: FALLBACK_VERSION,
     downloads: downloadsForVersion(FALLBACK_VERSION),
   });
 
-  // Fetch the latest GitHub release on mount to pick up newer versions without
-  // redeploying the site. On any failure (404 / rate limit / network) we keep
-  // the FALLBACK_VERSION links, which still work.
+  // Fetch the latest release on mount to pick up newer versions; any failure
+  // keeps the FALLBACK_VERSION links, which still work.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -131,11 +120,10 @@ export default function DownloadApp() {
         const res = await fetch(LATEST_API, {
           headers: { Accept: 'application/vnd.github+json' },
         });
-        if (!res.ok) return; // keep fallback
+        if (!res.ok) return;
         const data: LatestRelease = await res.json();
         const resolved = resolveDownloads(data.assets ?? []);
-        // Prefer exact asset URLs from the API; fall back to constructed URLs
-        // for any platform the release happens not to include.
+        // Prefer exact asset URLs from the API; fall back to constructed URLs.
         const constructed = downloadsForVersion(data.tag_name);
         const downloads: Downloads = {
           mac: resolved.mac ?? constructed.mac,
@@ -174,11 +162,9 @@ export default function DownloadApp() {
           </p>
         </div>
 
-        {/* Download buttons - PRIMARY */}
         <div className="mb-8 border-2 border-scatter-border bg-scatter-surface shadow-brutal p-6">
           <h2 className="text-xl font-black mb-4">download the app</h2>
 
-          {/* Platform tabs */}
           <div className="flex gap-0 border-2 border-scatter-border bg-scatter-bg mb-4">
             <PlatformTab
               active={platform === 'windows'}
@@ -200,10 +186,8 @@ export default function DownloadApp() {
             />
           </div>
 
-          {/* Big download button — links directly to the platform's installer
-              on the latest release. current is always set (constructed from the
-              known version, upgraded to exact asset URLs once the API responds),
-              so downloads work even if the GitHub API is rate-limited. */}
+          {/* current is always set, so downloads work even if the API is
+              rate-limited. */}
           {current ? (
             <a
               href={current.url}
@@ -239,7 +223,6 @@ export default function DownloadApp() {
           </div>
         </div>
 
-        {/* Quick start */}
         <h2 className="text-2xl font-black mb-4">after install</h2>
         <div className="space-y-3 mb-12">
           <StepCard
@@ -259,7 +242,6 @@ export default function DownloadApp() {
           />
         </div>
 
-        {/* FAQ */}
         <h2 className="text-2xl font-black mb-4">quick questions</h2>
         <div className="space-y-3">
           <Faq q="what does my computer actually store?">

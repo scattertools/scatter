@@ -18,14 +18,8 @@ const schema = z.object({
   WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
 
-  // Trust the X-Forwarded-* headers from a reverse proxy so req.ip (and thus
-  // the rate-limiter key) reflects the real client, not the proxy. Set this
-  // ONLY when the coordinator actually sits behind a trusted proxy/load
-  // balancer, otherwise clients can spoof X-Forwarded-For to evade limits.
-  //   false (default) — direct exposure, use the socket address.
-  //   true            — trust the immediate upstream (single proxy).
-  //   <number>        — trust N proxy hops.
-  //   <csv of IPs/CIDRs> — trust only these upstream addresses.
+  // Fastify trustProxy. Set ONLY behind a trusted proxy, else clients can spoof
+  // X-Forwarded-For to evade rate limits. false | true | <hops> | <csv IPs/CIDRs>.
   TRUST_PROXY: z.string().default('false'),
 
   SMTP_HOST: z.string().optional(),
@@ -40,8 +34,7 @@ const schema = z.object({
 
   INITIAL_CREDITS: z.coerce.number().default(100),
 
-  // Dev: allow one node to hold multiple shards of the same file
-  // In production, leave as false for actual redundancy
+  // Dev only: allow one node to hold multiple shards of a file (false in prod).
   ALLOW_SHARD_STACKING: z
     .string()
     .transform((s) => s === 'true' || s === '1')

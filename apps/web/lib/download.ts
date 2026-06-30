@@ -11,11 +11,8 @@ export interface DownloadProgress {
 }
 
 /**
- * Download a file:
- *  1. Fetch enough shards in parallel
- *  2. Reassemble using Reed-Solomon
- *  3. Decrypt with the key from the URL fragment
- *  4. Return a Blob that the browser can save
+ * Download a file: fetch enough shards in parallel, RS-reassemble, decrypt with
+ * the key from the URL fragment, and return a saveable Blob (see @scatter/protocol).
  */
 export async function downloadFile(
   fileId: string,
@@ -28,12 +25,11 @@ export async function downloadFile(
   const totalShards = dataShards + parityShards;
   const neededShards = dataShards;
 
-  // Estimate total bytes for progress
   const totalBytes = manifest.shards.reduce((s, x) => s + x.size, 0);
   let received = 0;
   let fetched = 0;
 
-  // We'll fetch in order of availability — try data shards first (faster, no math)
+  // Try data shards first (no RS math needed when all are present).
   const fetchedData: (Uint8Array | null)[] = new Array(totalShards).fill(null);
   const tryOrder = [...Array(totalShards).keys()].sort(
     (a, b) => Number(manifest.shards[a].isParity) - Number(manifest.shards[b].isParity),
@@ -54,7 +50,7 @@ export async function downloadFile(
     });
   };
 
-  // Fetch shards with bounded concurrency until we have enough
+  // Fetch shards with bounded concurrency until we have enough.
   const CONCURRENCY = 3;
   let nextTry = 0;
   const workers: Promise<void>[] = [];
@@ -68,7 +64,7 @@ export async function downloadFile(
           try {
             await fetchShard(idx);
           } catch {
-            // Skip failed shards — RS handles missing ones
+            // Skip failed shards — RS handles missing ones.
           }
         }
       })(),
@@ -82,7 +78,6 @@ export async function downloadFile(
     );
   }
 
-  // Decrypt & reassemble
   const key = keyFromBase64Url(keyFragment);
   const blob = await reassemble(manifest, fetchedData, key);
   return blob;

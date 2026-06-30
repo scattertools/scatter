@@ -14,7 +14,7 @@ import { CoordinatorClient } from './coordinator.ts';
 
 const program = new Command();
 
-// --- tiny output helpers (TTY-aware colour) ---
+// TTY-aware colour output helpers.
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: string) => (s: string) =>
   useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
@@ -45,10 +45,6 @@ program
   .description('Scatter node — contribute storage, help the network')
   .version(VERSION);
 
-// ---------------------------------------------------------------------------
-// start
-// ---------------------------------------------------------------------------
-
 program
   .command('start')
   .description('start the node')
@@ -68,7 +64,6 @@ program
     const daemon = await startDaemon(config);
 
     startHeadlessLogger(daemon);
-    // Graceful shutdown
     const shutdown = async () => {
       console.log('\nshutting down...');
       await daemon.stop();
@@ -77,10 +72,6 @@ program
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
   });
-
-// ---------------------------------------------------------------------------
-// status
-// ---------------------------------------------------------------------------
 
 program
   .command('status')
@@ -151,10 +142,6 @@ program
     console.log('');
   });
 
-// ---------------------------------------------------------------------------
-// login / logout / account
-// ---------------------------------------------------------------------------
-
 program
   .command('login')
   .description('link this node to your scatter account')
@@ -165,7 +152,7 @@ program
     const config = configFor(opts);
     const client = new CoordinatorClient(config.coordinator);
 
-    // Path A: one-time login code generated in the web account settings.
+    // Path A: one-time login code from the web account settings.
     if (opts.code) {
       const { session, user } = await client.loginWithCode(opts.code);
       saveConfig({ ...config, sessionToken: session });
@@ -194,7 +181,6 @@ program
       if (result.status === 'expired' || result.status === 'not_found') {
         fail('sign-in code expired, please try again');
       }
-      // pending — keep polling.
     }
   });
 
@@ -258,10 +244,6 @@ program
     ok(`username set to ${c.bold(user.username)}`);
   });
 
-// ---------------------------------------------------------------------------
-// config: set-storage / set-coordinator
-// ---------------------------------------------------------------------------
-
 program
   .command('set-storage <size>')
   .description('change the storage allocation (e.g., 50GB)')
@@ -290,10 +272,6 @@ program
     ok(`coordinator set to ${c.bold(trimmed)}`);
     console.log(c.dim('  restart the node for the change to take effect'));
   });
-
-// ---------------------------------------------------------------------------
-// reset
-// ---------------------------------------------------------------------------
 
 program
   .command('reset')

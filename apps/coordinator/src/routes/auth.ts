@@ -33,10 +33,8 @@ export async function authRoutes(app: FastifyInstance) {
         rateLimit: {
           max: 5,
           timeWindow: '1 minute',
-          // Key on IP + target email so a single IP can't blast many
-          // addresses and a single address can't be email-bombed from one
-          // source. Falls back to IP-only if the body has no valid email
-          // (the handler's zod parse rejects those anyway).
+          // Key on IP + email so one IP can't blast many addresses and one
+          // address can't be bombed from one source.
           keyGenerator: (req) => {
             const email =
               req.body &&
@@ -76,9 +74,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // Generate a one-time login code for the signed-in user. The code is shown
-  // in the web account settings and can be typed into the GUI app to sign in
-  // there without repeating the email magic-link flow.
+  // Issue a one-time login code for the signed-in user (typed into the GUI app).
   app.post(
     '/auth/code',
     {
@@ -91,9 +87,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // Exchange a one-time login code for a session. Public (the whole point is
-  // signing in on a device that isn't authenticated yet), but rate-limited to
-  // frustrate brute-forcing the short code space.
+  // Exchange a one-time login code for a session. Public but rate-limited.
   app.post(
     '/auth/code/verify',
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
@@ -111,8 +105,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // Device authorization flow (OAuth-style). The desktop app starts a session,
-  // opens the browser to the verification URL, and polls until approved.
+  // Device authorization flow (OAuth-style): start a session, then poll.
   app.post(
     '/auth/device/start',
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
@@ -129,8 +122,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // Poll a pending device authorization. Returns the current status; when the
-  // user has approved it in the browser, issues and returns the session.
+  // Poll a pending device authorization; issues the session once approved.
   app.post(
     '/auth/device/poll',
     { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
@@ -153,8 +145,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // Approve a pending device authorization by its short user code. Requires the
-  // approving user to be signed in on the web.
+  // Approve a pending device authorization by user code (requires web sign-in).
   app.post(
     '/auth/device/approve',
     {
@@ -176,7 +167,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { user };
   });
 
-  // Update the signed-in user's profile (currently just the username).
+  // Update the signed-in user's profile (currently just username).
   app.patch('/auth/me', { preHandler: app.requireAuth }, async (req, reply) => {
     const parsed = z
       .object({ username: usernameSchema })
@@ -189,7 +180,7 @@ export async function authRoutes(app: FastifyInstance) {
     const username = parsed.data.username;
     const userId = req.user!.sub;
 
-    // Enforce case-insensitive uniqueness with a friendly error.
+    // Enforce case-insensitive uniqueness.
     const clash = db
       .prepare<
         [string, string],

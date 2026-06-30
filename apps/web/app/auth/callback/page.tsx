@@ -24,10 +24,8 @@ function CallbackInner() {
   useEffect(() => {
     if (!token) return;
 
-    // Magic-link tokens are single-use: the coordinator marks them consumed on
-    // first verify. Guard against React running this effect twice (StrictMode /
-    // remounts), which would fire a second verify with the now-spent token and
-    // clobber the success state with a spurious error.
+    // Magic-link tokens are single-use; guard against React firing this effect
+    // twice (StrictMode/remounts), which would re-verify a spent token.
     if (verifiedToken.current === token) return;
     verifiedToken.current = token;
 
@@ -36,8 +34,7 @@ function CallbackInner() {
       .then(({ session, user }) => {
         signIn(session, user);
         setStatus('ok');
-        // Honor a stashed return target (e.g. linking the desktop app),
-        // otherwise land on the dashboard.
+        // Honor a stashed return target, otherwise the dashboard.
         let dest = '/dashboard';
         try {
           const stashed = sessionStorage.getItem('scatter:postSignInRedirect');

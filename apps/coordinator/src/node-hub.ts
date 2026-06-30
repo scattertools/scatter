@@ -11,7 +11,7 @@ export interface NodeResponse {
   id: string;
   ok: boolean;
   error?: string;
-  data?: string; // base64
+  data?: string;
   size?: number;
 }
 
@@ -26,7 +26,7 @@ class NodeHub {
   private connections = new Map<string, Connection>();
 
   register(nodeId: string, socket: WebSocket) {
-    // If already connected, kick the old one
+    // Replace any existing connection for this node.
     const existing = this.connections.get(nodeId);
     if (existing) {
       try {

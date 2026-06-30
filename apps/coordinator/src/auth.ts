@@ -6,7 +6,7 @@ import { db } from './db.ts';
 const secret = new TextEncoder().encode(env.JWT_SECRET);
 
 export interface SessionPayload {
-  sub: string; // user id
+  sub: string;
   email: string;
 }
 
@@ -120,7 +120,6 @@ function generateUsername(email: string): string {
     const candidate = `${base}-${randomBytes(2).toString('hex')}`;
     if (!taken.get(candidate)) return candidate;
   }
-  // Extremely unlikely fallback.
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
@@ -137,19 +136,16 @@ export function getUserById(id: string): UserRecord | null {
 }
 
 /**
- * Generate a one-time login code for an already-signed-in user. The code is a
- * short, human-friendly string that can be typed into the GUI app to sign in
- * without going through the email magic-link flow.
+ * Generate a one-time login code for an already-signed-in user, typed into the
+ * GUI app to sign in without the email magic-link flow.
  */
 export function createLoginCode(userId: string): string {
-  // Avoid ambiguous characters (0/O, 1/I/L) so codes are easy to read & type.
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const bytes = randomBytes(12);
   let raw = '';
   for (let i = 0; i < 12; i++) {
     raw += alphabet[bytes[i] % alphabet.length];
   }
-  // Format as XXXX-XXXX-XXXX for readability.
   const code = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
   const now = Date.now();
   const expiresAt = now + env.LOGIN_CODE_TTL_MINUTES * 60_000;
@@ -170,9 +166,8 @@ function normalizeLoginCode(code: string): string | null {
 }
 
 /**
- * Consume a one-time login code, returning the owning user (or null when the
- * code is unknown, already used, or expired). Codes are matched
- * case-insensitively and tolerate surrounding whitespace / missing dashes.
+ * Consume a one-time login code, returning the owning user (or null when
+ * unknown, used, or expired). Matched case-insensitively, dashes optional.
  */
 export function consumeLoginCode(
   code: string,
@@ -203,9 +198,8 @@ export function consumeLoginCode(
   return { userId: user.id, email: user.email };
 }
 
-// --- Device authorization flow ----------------------------------------------
-// OAuth-style flow for the desktop app: it starts a pending session, opens the
-// browser to /link, and polls until the signed-in user approves the user_code.
+// --- Device authorization flow (OAuth-style): the desktop app starts a
+// pending session, opens /link, and polls until the user approves the code.
 
 /** Readable alphabet shared by login codes and device user codes. */
 const READABLE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -230,7 +224,6 @@ export interface DeviceCodeRecord {
  */
 export function createDeviceCode(): DeviceCodeRecord {
   const deviceCode = randomBytes(32).toString('base64url');
-  // 8 readable chars as XXXX-XXXX.
   const raw = randomReadable(8);
   const userCode = `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
   const now = Date.now();

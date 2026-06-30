@@ -96,17 +96,13 @@ export class CoordinatorClient {
     });
   }
 
-  /**
-   * Step 1 of the OAuth-style device login: ask the coordinator for a device
-   * code + short user code the user approves in the browser.
-   */
+  /** Device login step 1: request a device code + short user code (see auth.ts). */
   async startDeviceLogin(): Promise<DeviceStart> {
     return this.request<DeviceStart>('/auth/device/start', { method: 'POST' });
   }
 
   /**
-   * Step 2: poll with the secret device code. Resolves to the current status;
-   * `approved` carries the session + user. Unlike most requests, the 404/410
+   * Device login step 2: poll with the secret device code. The 404/410
    * "gone"/"expired" responses are surfaced as states rather than thrown.
    */
   async pollDeviceLogin(deviceCode: string): Promise<DevicePoll> {

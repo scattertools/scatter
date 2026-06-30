@@ -24,6 +24,7 @@ export interface PreparedUpload {
   link: string;
 }
 
+/** Encrypt, shard, and build the manifest + share link for a file. */
 export async function prepareUpload(
   file: File,
   baseUrl: string,
@@ -32,7 +33,7 @@ export async function prepareUpload(
   const key = await generateKey();
   const fileId = generateFileId();
 
-  // Per-file salt: the AES-GCM key is HKDF-derived from key.raw + this salt.
+  // Per-file salt for HKDF key derivation (see crypto.ts deriveKey).
   const salt = crypto.getRandomValues(new Uint8Array(16));
 
   const encrypted = await encryptStream(file, key, salt);
@@ -68,16 +69,14 @@ export async function prepareUpload(
   };
 }
 
+/** Verify shard hashes, RS-decode, and decrypt back into the original Blob. */
 export async function reassemble(
   manifest: FileManifest,
   shards: (Uint8Array | null)[],
   key: EncryptionKey,
 ): Promise<Blob> {
-  // Decode-time integrity check: recompute SHA-256 of each present shard and
-  // compare against manifest.shards[i].hash. A shard whose hash mismatches is
-  // treated as MISSING (nulled) rather than fed into RS decode, so erasure
-  // coding can route around the corruption instead of producing garbage.
-  // If too many shards end up nulled, decodeShards throws "Not enough shards".
+  // Null out hash-mismatched shards so RS decode routes around corruption
+  // rather than producing garbage; too many nulls -> decodeShards throws.
   const verified: (Uint8Array | null)[] = await Promise.all(
     shards.map(async (shard, i) => {
       if (!shard) return null;
@@ -87,7 +86,6 @@ export async function reassemble(
     }),
   );
 
-  // Use exact ciphertext size from manifest — decodeShards will trim padding
   const encryptedData = decodeShards(
     verified,
     manifest.sharding,

@@ -8,14 +8,14 @@ interface Message {
   fileId?: string;
   shardIndex?: number;
   hash?: string;
-  data?: string; // base64
+  data?: string;
 }
 
 interface Response {
   id: string;
   ok: boolean;
   error?: string;
-  data?: string; // base64
+  data?: string;
   size?: number;
 }
 

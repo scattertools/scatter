@@ -6,8 +6,7 @@ import { pickNodesForShards } from '../assign.ts';
 import { issueShardToken } from '../auth.ts';
 import { nodeHub } from '../node-hub.ts';
 
-// Credit cost model: 1 credit per started MB of encryptedSize (min 1 credit).
-// Anonymous uploads are free; only logged-in users are charged.
+/** Credit cost: 1 per started MB of encryptedSize (min 1). Anonymous = free. */
 function creditCostForUpload(encryptedSize: number): number {
   return Math.max(1, Math.ceil(encryptedSize / (1024 * 1024)));
 }
@@ -42,7 +41,6 @@ const manifestSchema = z.object({
 });
 
 export async function fileRoutes(app: FastifyInstance) {
-  // Upload plan (unchanged)
   app.post('/files/upload/plan', async (req, reply) => {
     const manifest = manifestSchema.parse(req.body);
     const userId = req.user?.sub ?? null;
@@ -70,7 +68,6 @@ export async function fileRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: 'File ID conflict, retry' });
     }
 
-    // Credit enforcement (logged-in users only; anonymous uploads are free).
     const creditsCost = userId ? creditCostForUpload(manifest.encryptedSize) : 0;
     let creditsRemaining: number | null = null;
     if (userId) {
@@ -127,7 +124,7 @@ export async function fileRoutes(app: FastifyInstance) {
           s.hash,
         );
       });
-      // Charge credits for logged-in users (atomic with the file/shard inserts).
+      // Charge credits atomically with the file/shard inserts.
       if (userId) {
         db.prepare(
           `UPDATE users SET credits = credits - ? WHERE id = ?`,
@@ -160,7 +157,6 @@ export async function fileRoutes(app: FastifyInstance) {
     };
   });
 
-  // Download plan (unchanged)
   app.get('/files/:id/plan', async (req, reply) => {
     const { id } = req.params as { id: string };
 
@@ -204,7 +200,6 @@ export async function fileRoutes(app: FastifyInstance) {
     };
   });
 
-  // List user's files
   app.get('/files', { preHandler: app.requireAuth }, async (req) => {
     const files = db
       .prepare<
@@ -247,8 +242,8 @@ export async function fileRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const { id } = req.params as { id: string };
 
-      // Look up the file's shards before soft-deleting so we can free node
-      // bytes and propagate the delete to storage nodes afterwards.
+      // Look up shards before soft-deleting so we can free node bytes and
+      // propagate the delete to storage nodes afterwards.
       const shards = db
         .prepare<
           [string],
@@ -265,8 +260,7 @@ export async function fileRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: 'not found or not yours' });
       }
 
-      // Decrement each affected node's used_bytes regardless of reachability
-      // (these are synchronous DB writes — no async in between).
+      // Free each affected node's used_bytes regardless of reachability.
       const freeBytes = db.prepare(
         `UPDATE nodes SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?`,
       );
@@ -274,9 +268,8 @@ export async function fileRoutes(app: FastifyInstance) {
         freeBytes.run(s.size_bytes, s.node_id);
       }
 
-      // Propagate the delete to any online storage nodes, concurrently. A
-      // single failing/unreachable node must not abort the others; these async
-      // sends happen strictly after the DB writes above (never in a tx).
+      // Propagate the delete to online nodes concurrently; one unreachable
+      // node must not abort the others. Runs strictly after the DB writes.
       await Promise.allSettled(
         shards
           .filter((s) => nodeHub.isOnline(s.node_id))
@@ -300,7 +293,6 @@ export async function fileRoutes(app: FastifyInstance) {
     },
   );
 
-  // Get user credits
   app.get('/credits', { preHandler: app.requireAuth }, async (req) => {
     const user = db
       .prepare<

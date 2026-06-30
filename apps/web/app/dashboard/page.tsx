@@ -29,9 +29,6 @@ export default function Dashboard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [renderedAt, setRenderedAt] = useState(0);
-  // The session whose data is currently loaded; while it lags `session` we're
-  // still fetching. Deriving `loading` this way avoids a synchronous setState
-  // inside the effect.
   // The (session, reloadKey) pair whose data is currently loaded; while it lags
   // the live pair we're still fetching. Deriving `loading` this way avoids a
   // synchronous setState inside the effect.
@@ -69,10 +66,8 @@ export default function Dashboard() {
     };
   }, [session, currentKey]);
 
-  // Load any locally-stored share links (which include the #key fragment).
-  // The key is never on the server, so this is the only source for a working
-  // link. `files` only populates after the client-side fetch (post-hydration),
-  // so reading localStorage here can't cause a hydration mismatch.
+  // Load locally-stored share links (which include the #key fragment). The key
+  // is never on the server, so this is the only source for a working link.
   const links = useMemo<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     if (typeof window === 'undefined') return map;
@@ -89,7 +84,7 @@ export default function Dashboard() {
 
   const copyLink = (fileId: string) => {
     const link = links[fileId];
-    if (!link) return; // No key-bearing link on this device — button is disabled.
+    if (!link) return;
     navigator.clipboard.writeText(link);
     setCopiedId(fileId);
     setTimeout(() => setCopiedId(null), 2000);
@@ -136,7 +131,6 @@ export default function Dashboard() {
           </h1>
         </div>
 
-        {/* Stats grid */}
         <div className="grid sm:grid-cols-3 gap-4 mb-8">
           <DashStat
             icon={<FiGift />}
@@ -158,7 +152,6 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Primary CTAs */}
         <div className="grid sm:grid-cols-2 gap-4 mb-8">
           <Link
             href="/"
@@ -184,7 +177,6 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* File list */}
         <div className="border-2 border-scatter-border bg-scatter-surface shadow-brutal">
           <div className="p-4 border-b-2 border-scatter-border flex items-center justify-between">
             <h2 className="text-xl font-black">your files</h2>
@@ -249,7 +241,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Credit history */}
         {credits && credits.history.length > 0 && (
           <div className="mt-8 border-2 border-scatter-border bg-scatter-surface shadow-brutal">
             <div className="p-4 border-b-2 border-scatter-border">
@@ -420,7 +411,6 @@ function formatDate(ts: number): string {
   const diffDays = Math.floor(diffMs / 86_400_000);
 
   if (diffMs < 0) {
-    // Future date (expiration)
     const futureMins = Math.floor(-diffMs / 60_000);
     const futureHours = Math.floor(-diffMs / 3_600_000);
     if (futureMins < 60) return `in ${futureMins}m`;

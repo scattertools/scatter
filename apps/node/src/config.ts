@@ -11,8 +11,8 @@ export const configSchema = z.object({
   capacityBytes: z.number().int().positive(),
   dataDir: z.string(),
   port: z.number().int().min(1).max(65535),
-  sessionToken: z.string().nullable().optional(), // for linking to an account
-  nodeToken: z.string().nullable().optional(), // node auth token from coordinator
+  sessionToken: z.string().nullable().optional(),
+  nodeToken: z.string().nullable().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -27,7 +27,7 @@ export interface ConfigOverrides {
 const defaults: Omit<Config, 'dataDir'> = {
   nodeId: null,
   coordinator: 'http://localhost:4000',
-  capacityBytes: 10 * 1024 * 1024 * 1024, // 10 GB
+  capacityBytes: 10 * 1024 * 1024 * 1024,
   port: 7878,
   sessionToken: null,
   nodeToken: null,
@@ -77,7 +77,7 @@ export function saveConfig(config: Config) {
   writeFileSync(configPath(config.dataDir), JSON.stringify(config, null, 2));
 }
 
-/** Parse sizes like "50GB", "100MB", "512KB" */
+/** Parse human sizes like "50GB", "100MB", "512KB" into bytes. */
 export function parseSize(s: string): number {
   const match = s.trim().match(/^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB|K|M|G|T|B)?$/i);
   if (!match) throw new Error(`Invalid size: ${s}`);

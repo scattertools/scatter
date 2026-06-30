@@ -15,7 +15,7 @@ const transporter = env.SMTP_HOST
 
 export async function sendMagicLink(email: string, link: string) {
   if (!transporter) {
-    // Dev mode: log to console instead
+    // Dev mode: log the link to console.
     console.log(`\n🔗 Magic link for ${email}:\n   ${link}\n`);
     return;
   }

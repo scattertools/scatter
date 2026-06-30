@@ -28,13 +28,12 @@ export function parseLink(url: string): ParsedLink {
   return { fileId, key: keyFromBase64Url(keyStr) };
 }
 
-/** Crockford-base32-ish file IDs: short, readable, URL-safe, no confusing chars. */
+/** Generate a Crockford-base32 file ID: 26 chars, ~130 bits of entropy.
+ * Alphabet omits I/L/O/U; 256 % 32 === 0 so `b % 32` has no modulo bias. */
 export function generateFileId(): string {
-  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // no I, L, O, U (32 chars)
-  // 26 symbols * log2(32) = 130 bits of entropy. 256 % 32 === 0, so `b % 32`
-  // maps each byte uniformly across the 32-char alphabet (no modulo bias).
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   const bytes = crypto.getRandomValues(new Uint8Array(26));
   let out = '';
   for (const b of bytes) out += alphabet[b % 32];
-  return out; // 26 chars, ~130 bits of entropy
+  return out;
 }

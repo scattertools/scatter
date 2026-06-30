@@ -63,7 +63,6 @@ export default function Status() {
           system status.
         </h1>
 
-        {/* Overall banner */}
         <div
           className={`mb-8 p-6 border-2 border-scatter-border shadow-brutal ${
             overall === 'ok'
@@ -97,7 +96,6 @@ export default function Status() {
           </div>
         </div>
 
-        {/* Component list */}
         <div className="border-2 border-scatter-border bg-scatter-surface shadow-brutal">
           <Component
             name="coordinator api"

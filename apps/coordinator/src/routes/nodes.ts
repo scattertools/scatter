@@ -6,14 +6,13 @@ import { nodeHub } from "../node-hub.ts";
 import { issueNodeToken, verifyNodeToken } from "../auth.ts";
 
 export async function nodeRoutes(app: FastifyInstance) {
-  // WebSocket endpoint — nodes connect here and stay connected
+  // WebSocket endpoint — nodes connect here and stay connected.
   app.get(
     "/nodes/:id/connect",
     { websocket: true },
     async (socket, req) => {
       const { id } = req.params as { id: string };
 
-      // Verify node exists
       const exists = db.prepare(`SELECT id FROM nodes WHERE id = ?`).get(id);
       if (!exists) {
         socket.send(JSON.stringify({ error: "unknown node id" }));
@@ -21,8 +20,8 @@ export async function nodeRoutes(app: FastifyInstance) {
         return;
       }
 
-      // Authenticate the handshake using the node token. WS clients can set
-      // an Authorization header or a custom x-node-token header.
+      // Authenticate the handshake via node token (Authorization or
+      // x-node-token header).
       const authHeader = req.headers.authorization ?? "";
       const bearer = authHeader.startsWith("Bearer ")
         ? authHeader.slice(7)
@@ -40,13 +39,12 @@ export async function nodeRoutes(app: FastifyInstance) {
         return;
       }
 
-      // Mark as online
       db.prepare(`UPDATE nodes SET last_seen_at = ? WHERE id = ?`).run(Date.now(), id);
 
       nodeHub.register(id, socket);
       app.log.info({ nodeId: id }, "node connected");
 
-      // Keep last_seen fresh while connected
+      // Keep last_seen fresh while connected.
       const keepAlive = setInterval(() => {
         if (nodeHub.isOnline(id)) {
           db.prepare(`UPDATE nodes SET last_seen_at = ? WHERE id = ?`).run(Date.now(), id);
@@ -62,8 +60,7 @@ export async function nodeRoutes(app: FastifyInstance) {
     },
   );
 
-  // Regular HTTP registration — binds owner if a session is present and
-  // returns a long-lived node token used to authenticate later requests.
+  // HTTP registration — binds owner if signed in, returns a long-lived token.
   app.post("/nodes/register", async (req) => {
     const body = z
       .object({

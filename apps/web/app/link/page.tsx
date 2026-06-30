@@ -20,7 +20,7 @@ function LinkInner() {
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Require a signed-in session; bounce to sign-in and come back here.
+  // Require a signed-in session; bounce to sign-in and return here.
   useEffect(() => {
     if (ready && !user) {
       const c = params.get('code');
@@ -28,7 +28,7 @@ function LinkInner() {
       try {
         sessionStorage.setItem('scatter:postSignInRedirect', next);
       } catch {
-        /* sessionStorage unavailable; sign-in just lands on dashboard */
+        // sessionStorage unavailable; sign-in lands on dashboard.
       }
       router.push('/signin');
     }

@@ -6,17 +6,13 @@ import { nodeHub } from "../node-hub.ts";
 import { env } from "../env.ts";
 
 export async function shardRoutes(app: FastifyInstance) {
-  // Raw body parser for shard uploads
   app.addContentTypeParser(
     ["application/octet-stream", "application/x-binary"],
     { parseAs: "buffer", bodyLimit: env.MAX_SHARD_BYTES + 1024 * 1024 },
     (_req, body, done) => done(null, body),
   );
 
-  /**
-   * Upload a shard. Client provides the upload token from the upload plan.
-   * Body: raw shard bytes (application/octet-stream)
-   */
+  /** Upload a shard (raw octet-stream body); client passes the plan's token. */
   app.post<{ Params: { fileId: string; shardIndex: string } }>(
     "/files/:fileId/shards/:shardIndex",
     async (req, reply) => {
@@ -41,7 +37,6 @@ export async function shardRoutes(app: FastifyInstance) {
         return reply.code(413).send({ error: "shard too large" });
       }
 
-      // Find shard row
       const shard = db
         .prepare<
           [string, number, string],
@@ -55,7 +50,6 @@ export async function shardRoutes(app: FastifyInstance) {
       if (!shard) return reply.code(404).send({ error: "shard not assigned" });
       if (shard.uploaded_at) return reply.code(409).send({ error: "already uploaded" });
 
-      // Relay to node via WebSocket
       if (!nodeHub.isOnline(claims.nodeId)) {
         return reply.code(503).send({ error: "assigned node is offline" });
       }
@@ -73,7 +67,6 @@ export async function shardRoutes(app: FastifyInstance) {
           return reply.code(502).send({ error: resp.error ?? "node rejected shard" });
         }
 
-        // Mark uploaded
         db.prepare(
           `UPDATE shards SET uploaded_at = ? WHERE file_id = ? AND shard_index = ? AND node_id = ?`,
         ).run(Date.now(), fileId, idx, claims.nodeId);
@@ -85,9 +78,7 @@ export async function shardRoutes(app: FastifyInstance) {
     },
   );
 
-  /**
-   * Download a shard — coordinator fetches from the node and streams bytes.
-   */
+  /** Download a shard: coordinator fetches it from the node and streams bytes. */
   app.get<{ Params: { fileId: string; shardIndex: string } }>(
     "/files/:fileId/shards/:shardIndex",
     async (req, reply) => {
@@ -132,9 +123,9 @@ export async function shardRoutes(app: FastifyInstance) {
         }
         const bytes = Buffer.from(resp.data, "base64");
 
-        // Verify the returned bytes match the recorded shard hash. The
-        // manifest hash is WebCrypto SHA-256 hex (@scatter/protocol sha256Hex),
-        // which is identical to Node's crypto SHA-256 hex of the same bytes.
+        // Verify returned bytes match the recorded hash. The manifest hash is
+        // WebCrypto SHA-256 hex (@scatter/protocol sha256Hex), identical to
+        // Node's crypto SHA-256 hex of the same bytes.
         const actualHash = createHash("sha256").update(bytes).digest("hex");
         if (actualHash !== shard.hash) {
           return reply.code(502).send({ error: "shard hash mismatch" });

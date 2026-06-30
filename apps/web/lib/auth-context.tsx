@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getSessionSnapshot,
     getServerSessionSnapshot,
   );
-  // On the server we have no storage to read, so we're never "ready"; once the
-  // client subscription is established useSyncExternalStore returns true.
+  // On the server there's no storage, so we're never "ready"; the client
+  // subscription returns true once established.
   const ready = useSyncExternalStore(
     subscribeSession,
     () => true,

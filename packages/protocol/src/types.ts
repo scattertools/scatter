@@ -1,35 +1,31 @@
-// Protocol version for future-proofing.
-// v2 = HKDF-SHA-256 key derivation (key.raw + manifest salt) + per-chunk AAD
-// binding the chunk index into AES-GCM. v1 envelopes are no longer produced.
+// Protocol version. v2 = HKDF-SHA-256 key derivation + per-chunk AAD (see crypto.ts).
 export const PROTOCOL_VERSION = 2;
 
-// Sharding parameters
 export interface ShardConfig {
-  dataShards: number; // e.g. 10
-  parityShards: number; // e.g. 4 (can lose any 4 of 14 total)
-  shardSize: number; // bytes per shard
+  dataShards: number;
+  parityShards: number;
+  shardSize: number;
 }
 
-// Default: 10+4 Reed-Solomon, 4MB shards
+/** Default 10+4 Reed-Solomon with 4MB shards (tolerates losing any 4 of 14). */
 export const DEFAULT_SHARD_CONFIG: ShardConfig = {
   dataShards: 10,
   parityShards: 4,
   shardSize: 4 * 1024 * 1024,
 };
 
-// One shard's worth of info
 export interface ShardInfo {
-  index: number; // position in the sequence
+  index: number;
   isParity: boolean;
-  size: number; // bytes
-  hash: string; // hex-encoded SHA-256 of shard bytes
+  size: number;
+  hash: string; // hex SHA-256 of shard bytes
 }
 
-// The manifest = "recipe" to reassemble a file
+/** Recipe to reassemble an encrypted, sharded file (see manifest.ts). */
 export interface FileManifest {
   version: number;
-  fileId: string; // public ID, used in URLs
-  fileName: string; // ENCRYPTED when stored server-side
+  fileId: string; // public ID used in URLs
+  fileName: string; // encrypted when stored server-side
   fileSize: number; // original size in bytes
   encryptedSize: number; // exact ciphertext size before sharding
   mimeType: string;
@@ -38,26 +34,23 @@ export interface FileManifest {
   encryption: {
     algorithm: 'AES-256-GCM';
     ivLength: 12;
-    // The salt used to derive encryption key from user's random key
-    salt: string; // base64
+    salt: string; // base64, used for HKDF key derivation
   };
   sharding: ShardConfig;
-  shards: ShardInfo[]; // all shards in order
+  shards: ShardInfo[];
 }
 
-// What we hand to the coordinator when uploading
+/** Upload request to the coordinator: manifest plus per-shard node assignments. */
 export interface UploadPlan {
   fileId: string;
   manifest: FileManifest;
-  // Which node should store which shard
   assignments: Array<{
     shardIndex: number;
     nodeId: string;
-    uploadToken: string; // short-lived JWT for that specific shard
+    uploadToken: string; // short-lived JWT scoped to that shard
   }>;
 }
 
-// Node in the network
 export interface NodeInfo {
   id: string;
   version: string;

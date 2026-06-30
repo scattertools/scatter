@@ -12,9 +12,9 @@ interface UploadInfo {
   fileSize: number;
 }
 
-// Stored once right after upload; never changes for this page, so the store
-// never re-emits. useSyncExternalStore reads the client-only sessionStorage
-// value without a hydration mismatch (server renders the "not loaded" state).
+// Stored once right after upload and never changes, so the store never
+// re-emits. useSyncExternalStore reads the client-only sessionStorage value
+// without a hydration mismatch.
 function noopSubscribe() {
   return () => {};
 }
@@ -31,7 +31,7 @@ function readUploadInfo(id: string): UploadInfo | null {
     try {
       parsed = JSON.parse(raw) as UploadInfo;
     } catch {
-      // Corrupt entry — treat as if there's no info and show recovery UI.
+      // Corrupt entry — show recovery UI.
       parsed = null;
     }
   }
