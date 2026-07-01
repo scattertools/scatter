@@ -67,18 +67,6 @@ export function saveSession(token: string, user: User) {
   emit();
 }
 
-export function loadSession(): StoredSession | null {
-  if (typeof window === 'undefined') return null;
-  const token = localStorage.getItem(SESSION_KEY);
-  const userJson = localStorage.getItem(USER_KEY);
-  if (!token || !userJson) return null;
-  try {
-    return { token, user: JSON.parse(userJson) };
-  } catch {
-    return null;
-  }
-}
-
 export function clearSession() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(SESSION_KEY);

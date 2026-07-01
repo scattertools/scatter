@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const DEFAULT_DATA_DIR = join(homedir(), '.scatter');
 
-export const configSchema = z.object({
+const configSchema = z.object({
   nodeId: z.string().nullable(),
   coordinator: z.string().url(),
   capacityBytes: z.number().int().positive(),
