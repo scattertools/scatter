@@ -23,14 +23,15 @@ run it.
 - lets the user allocate how much disk space to donate,
 - lets the user sign in (magic link) and see their credit balance.
 
-**Current scope (stub node).** The backend is a *node shell*: it does
-register + heartbeat against the coordinator and persists local config, but it
-does **not** itself serve shards over the wire. Shard serving is the job of the
-full TypeScript node daemon (`apps/node`). The GUI is intentionally decoupled
-from that daemon for now — see [§9 Future work](#9-future-work).
+**Current scope (full node).** The backend is a complete shard-serving node,
+reimplemented natively in Rust: it registers + heartbeats against the
+coordinator, persists local config, and — over the coordinator WebSocket
+protocol — stores, serves, and deletes shards on local disk. It is functionally
+equivalent to the TypeScript node daemon (`apps/node`); the GUI does **not**
+shell out to that daemon.
 
-**Non-goals (today).** No real shard storage/transfer, no P2P transport, no
-file upload UI (that lives in the web app).
+**Non-goals (today).** No P2P transport (shards relay through the coordinator,
+as elsewhere in Scatter), and no file upload UI (that lives in the web app).
 
 ---
 
@@ -40,14 +41,14 @@ file upload UI (that lives in the web app).
 apps/
   web/         Next.js landing + upload UI       ← visual design reference
   coordinator/ Fastify + better-sqlite3 API      ← GUI talks to this
-  node/        TS daemon, real WS shard node      ← NOT used by the GUI (yet)
-  gui/         Tauri 2 + React (this app)
+  node/        TS daemon, real WS shard node      ← feature-equivalent peer
+  gui/         Tauri 2 + React (this app)         ← native Rust shard node
 ```
 
 Run it from the repo root:
 
 ```bash
-pnpm dev:gui        # → pnpm --filter scatter-gui tauri dev
+pnpm dev:app        # → pnpm --filter scatter-gui tauri dev
 ```
 
 The GUI talks to the coordinator over HTTP at **`http://localhost:4000`** by
@@ -74,8 +75,10 @@ default (matching `apps/node`'s `config.ts` default).
                                             │  Coordinator (:4000)   │
                                             │  /nodes/register       │
                                             │  /nodes/:id/heartbeat  │
-                                            │  /auth/request|verify  │
+                                            │  /auth/device/*        │
+                                            │  /auth/code/verify     │
                                             │  /auth/me  /credits    │
+                                            │  + WS node protocol    │
                                             └───────────────────────┘
 ```
 
@@ -126,11 +129,13 @@ The crate is split so the same logic works on desktop and (potentially) mobile:
 
 ```rust
 struct AppState {
-    node_state:  Mutex<NodeState>,
-    activity:    Mutex<Vec<ActivityEvent>>,
-    started_at:  Mutex<Option<Instant>>,   // for live uptime
-    shutdown_tx: Mutex<Option<mpsc::Sender<()>>>, // cancels heartbeat loop
-    account:     Mutex<Option<Account>>,
+    node_state:      Mutex<NodeState>,
+    activity:        Mutex<Vec<ActivityEvent>>,
+    started_at:      Mutex<Option<Instant>>,        // for live uptime
+    shutdown_tx:     Mutex<Option<mpsc::Sender<()>>>, // cancels heartbeat loop
+    ws_shutdown_tx:  Mutex<Option<mpsc::Sender<()>>>, // cancels WS shard loop
+    account:         Mutex<Option<Account>>,
+    pending_device_code: Mutex<Option<String>>,     // secret device-login code
 }
 ```
 
@@ -142,15 +147,16 @@ so the frontend receives idiomatic JS shapes.
 ```jsonc
 {
   "node_id": "…",                       // assigned by coordinator on register
+  "node_token": "…",                    // node auth token (heartbeats + WS)
   "capacity_bytes": 53687091200,        // user-chosen allocation
   "coordinator": "http://localhost:4000",
-  "session": "…"                        // bearer token, optional
+  "session": "…"                        // user bearer token, optional
 }
 ```
 
 Loaded with sane defaults if missing/corrupt (`load_config` never panics).
-`save_config` writes pretty JSON. The `session` field is `#[serde(default)]`
-so older config files remain forward-compatible.
+`save_config` writes pretty JSON. `node_token` and `session` are
+`#[serde(default)]` so older config files remain forward-compatible.
 
 ---
 
@@ -164,11 +170,15 @@ them with `invoke('<name>', args)`.
 | `get_state` | – | `NodeState` | Snapshot + live `uptimeSeconds` (from `started_at`) and `creditsEarned` (from account balance). |
 | `get_activity` | – | `ActivityEvent[]` | Current activity buffer. |
 | `get_account` | – | `Account \| null` | Signed-in account, if any. |
-| `start_node` | – | `Result<()>` | Registers with coordinator on first run (persists `node_id`), marks connected, starts uptime clock, spawns heartbeat loop. |
-| `stop_node` | – | `Result<()>` | Signals the heartbeat loop to stop, marks disconnected, clears uptime. |
+| `start_node` | – | `Result<()>` | Registers with coordinator on first run (persists `node_id` + token, binds to the signed-in user when a session exists), marks connected, starts uptime clock, spawns the heartbeat loop and the WebSocket shard-serving loop. |
+| `stop_node` | – | `Result<()>` | Signals the heartbeat + WS loops to stop, marks disconnected, clears uptime. |
 | `set_capacity` | `{ bytes: u64 }` | `Result<()>` | Persists new allocation; takes effect on next heartbeat. |
-| `request_login` | `{ email: string }` | `Result<()>` | `POST /auth/request` — coordinator emails a magic link. |
-| `verify_login` | `{ token: string }` | `Result<Account>` | `POST /auth/verify`, persists `session`, fetches credit balance. |
+| `set_coordinator` | `{ url: string }` | `Result<()>` | Validates + persists the coordinator URL (restart to take effect). |
+| `get_coordinator` | – | `string` | Current coordinator URL. |
+| `start_device_login` | – | `Result<DeviceLogin>` | `POST /auth/device/start` — returns user code + verification URL; the secret device code stays in the backend. |
+| `poll_device_login` | – | `Result<Account \| null>` | `POST /auth/device/poll` — `null` while pending, `Account` once approved, error when expired. Persists `session`. |
+| `login_with_code` | `{ code: string }` | `Result<Account>` | `POST /auth/code/verify` — exchanges a one-time code for a session, persists it, loads balance. |
+| `update_username` | `{ username: string }` | `Result<Account>` | `PATCH /auth/me` — sets the account username. |
 | `logout` | – | `Result<()>` | Clears `session` from config and in-memory account. |
 
 `Result<_, String>` errors surface to the UI as human-readable strings
@@ -188,7 +198,7 @@ interface NodeState {
 }
 
 interface ActivityEvent {
-  kind: 'uploaded' | 'downloaded';
+  kind: 'uploaded' | 'downloaded' | 'deleted';
   fileId: string;
   shardIndex: number;
   size: number;
@@ -197,6 +207,7 @@ interface ActivityEvent {
 
 interface Account {
   email: string;
+  username: string;
   balance: number;
 }
 ```
@@ -205,12 +216,17 @@ interface Account {
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/nodes/register` | POST | – | `{capacityBytes, version}` → `{nodeId}` |
-| `/nodes/:id/heartbeat` | POST | – | `{usedBytes, capacityBytes}` keep-alive |
-| `/auth/request` | POST | – | `{email}` → emails magic link |
-| `/auth/verify` | POST | – | `{token}` → `{session, user:{email}}` |
+| `/nodes/register` | POST | optional Bearer (session) | `{capacityBytes, version}` → `{nodeId, nodeToken}`; binds to the user when signed in |
+| `/nodes/:id/heartbeat` | POST | Bearer (node token) | `{usedBytes, capacityBytes}` keep-alive |
+| `/auth/device/start` | POST | – | → device code + user code + verification URL |
+| `/auth/device/poll` | POST | – | `{deviceCode}` → `{status, session, user}` once approved |
+| `/auth/code/verify` | POST | – | `{code}` → `{session, user}` (one-time login code) |
 | `/auth/me` | GET | Bearer | restore session on launch |
+| `/auth/me` | PATCH | Bearer | `{username}` → updated user |
 | `/credits` | GET | Bearer | `{balance}` |
+
+Shard storage/serving/deletion happens over the coordinator **WebSocket** node
+protocol (see `src-tauri/src/ws_client.rs`), not the HTTP endpoints above.
 
 ---
 
@@ -302,19 +318,22 @@ once on mount and after auth changes.
 - Storage allocation `range` input (10–500 GB, step 10) with live GB readout.
 - `save` button → `set_capacity`, shows a `✓ saved` confirmation.
 - Warning when connected ("changes apply on next heartbeat").
-- Read-only coordinator URL at the bottom.
+- Editable coordinator URL at the bottom → `get_coordinator` / `set_coordinator`
+  (inline edit, validation, save/cancel; restart to take effect).
 
 ### `AccountView`
 
 Two modes:
 
-- **Signed in** — avatar + email, a credits card with the balance, an
-  explainer, and a `sign out` button.
-- **Signed out** — two-stage magic-link flow:
-  1. **email** stage → `request_login`,
-  2. **token** stage → paste the code from the magic-link page → `verify_login`.
+- **Signed in** — avatar + email/username, a credits card with the balance, an
+  editable username (`update_username`), an explainer, and a `sign out` button.
+- **Signed out** — two ways to authenticate:
+  1. **device flow** → `start_device_login` opens the verification URL + shows
+     the short user code, then polls `poll_device_login` until approved;
+  2. **login code** → paste a one-time code from the web account settings →
+     `login_with_code`.
 
-  Includes "use a different email" to reset, inline error banner, Enter-to-submit.
+  Inline error banner, Enter-to-submit.
 
 ### Shared pieces
 
@@ -329,18 +348,22 @@ Two modes:
 ```
 launch
   └─ load_config()  →  hydrate NodeState (capacity, node_id)
+  └─ init_storage() →  seed used_bytes + shard_count from on-disk index
   └─ if session: restore Account (GET /auth/me + /credits) on temp runtime
   └─ Tauri builder runs, window opens
 
 user clicks "start"
-  └─ start_node: register if needed → connected=true → started_at=now
+  └─ start_node: register if needed (persist node_id + token) → connected=true
+                 → started_at=now
                  → spawn heartbeat loop (every 30s: POST /heartbeat)
+                 → spawn WS loop (store/serve/delete shards, emit activity)
 
 user clicks "stop"
-  └─ stop_node: send () on shutdown channel → loop breaks
+  └─ stop_node: send () on heartbeat + WS shutdown channels → loops break
               → connected=false, started_at=None
 
-login: request_login → (email) → verify_login → Account + persisted session
+login: start_device_login → poll_device_login (or login_with_code)
+       → Account + persisted session
 logout: clears session + account
 ```
 
@@ -349,29 +372,29 @@ logout: clears session + account
 - **Credits** in `NodeState.creditsEarned` are mirrored from the signed-in
   account balance (clamped to ≥ 0), so the main view shows real credits once
   signed in.
-- **`shardCount`, `usedBytes`, activity** are currently always zero/empty
-  because the stub does not serve shards (see below).
+- **`shardCount`, `usedBytes`, activity** reflect real on-disk shard storage:
+  they are seeded from the persisted shard index on launch and updated live as
+  shards are stored/served/deleted over the coordinator WebSocket protocol.
 
 ---
 
 ## 9. Future work
 
-The backend is deliberately a node *shell*. To become a real node it would need:
+The node is feature-complete relative to the CLI. Remaining work is polish and
+distribution rather than core functionality:
 
-1. **Shard serving** — connect to the coordinator's WebSocket node protocol
-   (as `apps/node` does), accept/serve shards, and write them to the allocated
-   disk space.
-2. **Real metrics** — populate `usedBytes`, `shardCount`, and emit
-   `ActivityEvent`s as shards are uploaded/downloaded (the UI already renders
-   these the moment the backend produces them).
-3. **Embedding the node daemon** — either port the TS node logic to Rust or
-   supervise the existing daemon as a sidecar via the Tauri shell plugin.
-4. **Configurable coordinator** — surface the coordinator URL as an editable
-   setting (today it is read-only and fixed to the default).
+- **Packaging & signing** — produce signed/notarized bundles per platform and
+  publish them alongside the CLI binaries (see the repo roadmap).
+- **Auto-update** — wire up Tauri's updater so installed apps self-update.
+- **Run on login / background tray** — let the node keep contributing without
+  the window open (system tray + launch-at-login).
+- **Shared core with `apps/node`** — the Rust backend currently reimplements
+  the node protocol; longer term the storage/WS logic could be extracted into a
+  shared crate to avoid drift with the TS daemon.
 
-The frontend, IPC contract, and design system are built to absorb this without
-structural change: the views already bind to `usedBytes`, `shardCount`, and the
-activity stream.
+Once direct P2P transfers land in the protocol (repo roadmap), the node — CLI
+and GUI alike — will gain a peer transport; the GUI's IPC contract and design
+system are built to absorb that without structural change.
 
 ---
 
@@ -380,7 +403,7 @@ activity stream.
 ```bash
 # from repo root
 pnpm install
-pnpm dev:gui          # dev with hot reload (Vite + Tauri)
+pnpm dev:app          # dev with hot reload (Vite + Tauri)
 
 # inside apps/gui
 pnpm build            # tsc + vite build (also bundles fonts into dist/)

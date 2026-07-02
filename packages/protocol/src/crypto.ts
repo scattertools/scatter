@@ -7,11 +7,16 @@
 const KEY_LENGTH_BITS = 256;
 const IV_LENGTH_BYTES = 12;
 const CHUNK_SIZE = 4 * 1024 * 1024;
+const PBKDF2_ITERS = 210_000;
 
 const HKDF_INFO = new TextEncoder().encode('scatter-file-key-v2');
 
-// Narrows TS 5.7+ Uint8Array<ArrayBufferLike> to the ArrayBuffer-backed
-// BufferSource/BlobPart WebCrypto + Blob expect; safe in our target runtimes.
+/**
+ * Narrows TS 5.7+ Uint8Array<ArrayBufferLike> to the ArrayBuffer-backed
+ * BufferSource/BlobPart WebCrypto + Blob expect; safe in our target runtimes.
+ * @param bytes Uint8Array\<ArrayBufferLike\>
+ * @returns ArrayBuffer-backed BufferSource/BlobPart WebCrypto + Blob expect
+ */
 function ab(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return bytes as Uint8Array<ArrayBuffer>;
 }
@@ -48,6 +53,80 @@ export function keyFromBase64Url(s: string): EncryptionKey {
     throw new Error(`Invalid key length: ${raw.length}`);
   }
   return { raw, base64Url: s };
+}
+/**
+ * Password wrapping: derive a 256-bit AES-GCM key from a password via
+ * PBKDF2-SHA-256 (210k iters), then encrypt the files raw key with it.
+ * Zero-knowledge. (only wrapped bytes + salt stored)
+ *
+ * Wire format: `[16-byte salt][12-byte IV][ciphertext+GCM tag]`,
+ * base64-url encoded
+ */
+async function passwordKey(
+  password: string,
+  salt: Uint8Array,
+): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey(
+    'raw',
+    ab(new TextEncoder().encode(password)),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey'],
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: ab(salt),
+      iterations: PBKDF2_ITERS,
+    },
+    base,
+    { name: 'AES-GCM', length: KEY_LENGTH_BITS },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+export async function wrapKeyWithPassword(
+  key: EncryptionKey,
+  password: string,
+): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH_BYTES));
+  const cryptoKey = await passwordKey(password, salt);
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: ab(iv) },
+      cryptoKey,
+      ab(key.raw),
+    ),
+  );
+  const blob = new Uint8Array(16 + IV_LENGTH_BYTES + ct.length);
+  blob.set(salt, 0);
+  blob.set(iv, 16);
+  blob.set(ct, 16 + IV_LENGTH_BYTES);
+  return base64UrlEncode(blob);
+}
+
+/** Unwrap a password-wrapped key. Throws on wrong password (GCM auth fail) */
+export async function unwrapKeyWithPassword(
+  wrapped: string,
+  password: string,
+): Promise<EncryptionKey> {
+  const blob = base64UrlDecode(wrapped);
+  const salt = blob.subarray(0, 16);
+  const iv = blob.subarray(16, 16 + IV_LENGTH_BYTES);
+  const ct = blob.subarray(16 + IV_LENGTH_BYTES);
+  const cryptoKey = await passwordKey(password, salt);
+  const raw = new Uint8Array(
+    await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: ab(iv) },
+      cryptoKey,
+      ab(ct),
+    ),
+  );
+  if (raw.length !== 32) throw new Error(`Invalid key length: ${raw.length}`);
+  return { raw, base64Url: base64UrlEncode(raw) };
 }
 
 /**
@@ -173,11 +252,10 @@ export async function decryptStream(
     const header = new Uint8Array(
       await source.slice(offset, offset + 4).arrayBuffer(),
     );
-    const ctLen = new DataView(
-      header.buffer,
-      header.byteOffset,
-      4,
-    ).getUint32(0, false);
+    const ctLen = new DataView(header.buffer, header.byteOffset, 4).getUint32(
+      0,
+      false,
+    );
     offset += 4;
 
     if (offset + IV_LENGTH_BYTES + ctLen > total) {
@@ -245,7 +323,10 @@ export function base64UrlDecode(s: string): Uint8Array {
 // Node Buffer accessed via globalThis so this file needs no @types/node
 // and stays browser-safe.
 interface NodeBufferLike {
-  from(input: Uint8Array | string, encoding?: string): {
+  from(
+    input: Uint8Array | string,
+    encoding?: string,
+  ): {
     toString(encoding: string): string;
   } & Uint8Array;
 }

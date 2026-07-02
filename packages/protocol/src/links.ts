@@ -7,7 +7,8 @@ import { type EncryptionKey, keyFromBase64Url } from './crypto.ts';
 
 export interface ParsedLink {
   fileId: string;
-  key: EncryptionKey;
+  key: EncryptionKey | null; // null when password protected (unwrap needed)
+  wrappedKey: string | null; // present when password protected
 }
 
 export function buildLink(
@@ -18,6 +19,18 @@ export function buildLink(
   return `${baseUrl.replace(/\/$/, '')}/f/${fileId}#${key.base64Url}`;
 }
 
+/**
+ * Link for a password protected file. fragment holds wrapped key,
+ * not raw. prefix with 'p.' so download page knows to prompt.
+ */
+export function buildPasswordLink(
+  baseUrl: string,
+  fileId: string,
+  wrappedKey: string,
+): string {
+  return `${baseUrl.replace(/\/$/, '')}/f/${fileId}#p.${wrappedKey}`;
+}
+
 export function parseLink(url: string): ParsedLink {
   const u = new URL(url);
   const match = u.pathname.match(/\/f\/([A-Za-z0-9_-]+)/);
@@ -25,7 +38,10 @@ export function parseLink(url: string): ParsedLink {
   const fileId = match[1];
   const keyStr = u.hash.slice(1);
   if (!keyStr) throw new Error('Invalid Scatter link: missing key in fragment');
-  return { fileId, key: keyFromBase64Url(keyStr) };
+  if (keyStr.startsWith('p.')) {
+    return { fileId, key: null, wrappedKey: keyStr.slice(2) };
+  }
+  return { fileId, key: keyFromBase64Url(keyStr), wrappedKey: null };
 }
 
 /** Generate a Crockford-base32 file ID: 26 chars, ~130 bits of entropy.
