@@ -48,14 +48,18 @@ await app.register(websocket, {
   options: { maxPayload: 16 * 1024 * 1024 },
 });
 
-app.addHook("onRequest", async (req) => {
-  const auth = req.headers.authorization;
-  if (auth?.startsWith("Bearer ")) {
-    const token = auth.slice(7);
-    const user = await verifySession(token);
-    if (user) req.user = user;
-  }
-});
+app.addHook(
+  "onRequest",
+  { config: { rateLimit: { max: 200, timeWindow: "1 minute" } } },
+  async (req) => {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      const token = auth.slice(7);
+      const user = await verifySession(token);
+      if (user) req.user = user;
+    }
+  },
+);
 
 app.decorate("requireAuth", async (req: FastifyRequest, reply: FastifyReply) => {
   if (!req.user) reply.code(401).send({ error: "authentication required" });
