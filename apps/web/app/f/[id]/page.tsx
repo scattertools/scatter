@@ -27,6 +27,8 @@ export default function DownloadPage({
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<DownloadPlan | null>(null);
   const [manifest, setManifest] = useState<FileManifest | null>(null);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [password, setPassword] = useState('');
   const [progress, setProgress] = useState<{
     pct: number;
     label: string;
@@ -75,12 +77,26 @@ export default function DownloadPage({
 
   const handleDownload = async () => {
     if (!plan || !manifest) return;
-    const keyFragment = window.location.hash.slice(1);
+    const raw = window.location.hash.slice(1);
     setState('downloading');
     setProgress({ pct: 0, label: 'fetching file...' });
 
     try {
       const { downloadFile, saveBlob } = await import('@/lib/download');
+
+      let keyFragment = raw;
+      if (raw.startsWith('p.')) {
+        const { unwrapKeyWithPassword } = await import('@scatter/protocol');
+        try {
+          const key = await unwrapKeyWithPassword(raw.slice(2), password);
+          keyFragment = key.base64Url;
+        } catch {
+          setState('ready');
+          setProgress(null);
+          setError('Incorrect password.');
+          return;
+        }
+      }
 
       const blob = await downloadFile(id, keyFragment, plan, (p) => {
         const pct = (p.received / p.total) * 90;
@@ -123,7 +139,9 @@ export default function DownloadPage({
                 size={48}
                 className="mx-auto mb-4 text-scatter-danger"
               />
-              <h1 className="text-2xl font-black mb-2">can&apos;t open this file</h1>
+              <h1 className="text-2xl font-black mb-2">
+                can&apos;t open this file
+              </h1>
               <p className="text-scatter-muted mb-6">{error}</p>
               <Link
                 href="/"
@@ -214,29 +232,49 @@ export default function DownloadPage({
                         </button>
                       </div>
                     ) : (
-                      <button
-                        onClick={handleDownload}
-                        disabled={state === 'downloading'}
-                        className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                      >
-                        {state === 'downloading' ? (
-                          <>
-                            <FiLoader size={18} className="animate-spin" />{' '}
-                            downloading...
-                          </>
-                        ) : (
-                          <>
-                            <FiDownload size={18} /> download file
-                          </>
+                      <>
+                        {error && (
+                          <p className="mb-3 text-sm font-semibold text-scatter-danger">
+                            {error}
+                          </p>
                         )}
-                      </button>
+                        {needsPassword && (
+                          <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="enter password"
+                            className="mb-3 w-full border-2 border-scatter-border bg-scatter-bg px-3 py-3 font-mono text-sm"
+                          />
+                        )}
+                        <button
+                          onClick={handleDownload}
+                          disabled={
+                            state === 'downloading' ||
+                            (needsPassword && !password)
+                          }
+                          className="brutal-btn w-full px-6 py-4 bg-scatter-primary text-white font-bold border-2 border-scatter-border shadow-brutal flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                          {state === 'downloading' ? (
+                            <>
+                              <FiLoader size={18} className="animate-spin" />{' '}
+                              downloading...
+                            </>
+                          ) : (
+                            <>
+                              <FiDownload size={18} /> download file
+                            </>
+                          )}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
 
                 <div className="mt-4 p-4 border-2 border-scatter-border bg-scatter-surface text-center text-sm text-scatter-muted">
                   <p>
-                    the decryption key is in your URL — we can&apos;t read this file.{' '}
+                    the decryption key is in your URL — we can&apos;t read this
+                    file.{' '}
                     <Link
                       href="/about"
                       className="brutal-link underline font-semibold"
