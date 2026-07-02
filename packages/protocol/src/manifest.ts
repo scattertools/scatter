@@ -8,13 +8,14 @@ import {
   encryptStream,
   decryptStream,
   generateKey,
+  wrapKeyWithPassword,
   base64UrlEncode,
   base64UrlDecode,
   sha256Hex,
   type EncryptionKey,
 } from './crypto.ts';
 import { encodeShards, decodeShards, hashShards } from './sharding.ts';
-import { generateFileId, buildLink } from './links.ts';
+import { generateFileId, buildLink, buildPasswordLink } from './links.ts';
 
 export interface PreparedUpload {
   fileId: string;
@@ -29,6 +30,7 @@ export async function prepareUpload(
   file: File,
   baseUrl: string,
   config: ShardConfig = DEFAULT_SHARD_CONFIG,
+  password?: string,
 ): Promise<PreparedUpload> {
   const key = await generateKey();
   const fileId = generateFileId();
@@ -59,6 +61,17 @@ export async function prepareUpload(
     sharding: config,
     shards: shardInfos,
   };
+
+  if (password) {
+    const wrappedKey = await wrapKeyWithPassword(key, password);
+    return {
+      fileId,
+      key,
+      manifest,
+      shards,
+      link: buildPasswordLink(baseUrl, fileId, wrappedKey),
+    };
+  }
 
   return {
     fileId,
