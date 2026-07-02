@@ -40,6 +40,7 @@ await app.register(cors, {
 });
 
 await app.register(rateLimit, {
+  global: true,
   max: 200,
   timeWindow: "1 minute",
 });
