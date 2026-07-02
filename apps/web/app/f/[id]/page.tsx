@@ -52,6 +52,7 @@ export default function DownloadPage({
         if (!active) return;
         setPlan(p);
         setManifest(p.manifest as FileManifest);
+        setNeedsPassword(window.location.hash.slice(1).startsWith('p.'));
         setState('ready');
       })
       .catch((e) => {
