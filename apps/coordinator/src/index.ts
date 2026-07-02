@@ -52,6 +52,7 @@ app.addHook(
   "onRequest",
   { config: { rateLimit: { max: 200, timeWindow: "1 minute" } } },
   async (req) => {
+    await req.rateLimit();
     const auth = req.headers.authorization;
     if (auth?.startsWith("Bearer ")) {
       const token = auth.slice(7);
