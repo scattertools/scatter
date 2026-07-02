@@ -19,6 +19,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Restrict default GITHUB_TOKEN to least privilege for this CI workflow.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     name: Typecheck, Lint, Test, Build
