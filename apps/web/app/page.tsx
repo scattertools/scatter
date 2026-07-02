@@ -18,6 +18,7 @@ import Footer from '@/components/Footer';
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [password, setPassword] = useState('');
   const [stats, setStats] = useState<NetworkStats | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +81,12 @@ export default function Home() {
       const { prepareUpload } = await import('@scatter/protocol');
       const { uploadShards } = await import('@/lib/upload');
 
-      const prep = await prepareUpload(file, window.location.origin);
+      const prep = await prepareUpload(
+        file,
+        window.location.origin,
+        undefined,
+        password || undefined,
+      );
       setProgress({ pct: 5, label: 'requesting upload...' });
 
       const plan = await api.uploadPlan(prep.manifest, session);
@@ -212,6 +218,22 @@ export default function Home() {
               {error && (
                 <div className="mb-4 p-3 border-2 border-scatter-danger bg-scatter-danger/10 text-sm font-semibold">
                   {error}
+                </div>
+              )}
+
+              {!uploading && (
+                <div className="mb-4">
+                  <label className="text-xs font-mono uppercase tracking-wider text-scatter-muted font-bold flex items-center gap-2">
+                    <FiLock size={12} /> password (optional)
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="require a password to download"
+                    className="mt-2 w-full border-2 border-scatter-border bg-scatter-bg px-3 py-3 font-mono text-sm"
+                  />
                 </div>
               )}
 
