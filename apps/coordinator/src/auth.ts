@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import { env } from './env.ts';
 import { db } from './db.ts';
 
@@ -205,9 +205,8 @@ export function consumeLoginCode(
 const READABLE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 function randomReadable(len: number): string {
-  const bytes = randomBytes(len);
   let out = '';
-  for (let i = 0; i < len; i++) out += READABLE_ALPHABET[bytes[i] % READABLE_ALPHABET.length];
+  for (let i = 0; i < len; i++) out += READABLE_ALPHABET[randomInt(READABLE_ALPHABET.length)];
   return out;
 }
 
