@@ -141,10 +141,9 @@ export function getUserById(id: string): UserRecord | null {
  */
 export function createLoginCode(userId: string): string {
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  const bytes = randomBytes(12);
   let raw = '';
   for (let i = 0; i < 12; i++) {
-    raw += alphabet[bytes[i] % alphabet.length];
+    raw += alphabet[randomInt(alphabet.length)];
   }
   const code = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
   const now = Date.now();
@@ -206,7 +205,8 @@ const READABLE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 function randomReadable(len: number): string {
   let out = '';
-  for (let i = 0; i < len; i++) out += READABLE_ALPHABET[randomInt(READABLE_ALPHABET.length)];
+  for (let i = 0; i < len; i++)
+    out += READABLE_ALPHABET[randomInt(READABLE_ALPHABET.length)];
   return out;
 }
 
@@ -274,14 +274,18 @@ export function pollDeviceCode(deviceCode: string): DevicePollResult {
     .get(deviceCode);
   if (!row) return { status: 'not_found' };
   if (row.expires_at < Date.now()) {
-    db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(deviceCode);
+    db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(
+      deviceCode,
+    );
     return { status: 'expired' };
   }
   if (!row.approved || !row.user_id) return { status: 'pending' };
 
   const user = getUserById(row.user_id);
   if (!user) {
-    db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(deviceCode);
+    db.prepare(`DELETE FROM device_codes WHERE device_code = ?`).run(
+      deviceCode,
+    );
     return { status: 'not_found' };
   }
 
@@ -306,9 +310,7 @@ export function approveDeviceCode(code: string, userId: string): boolean {
     .prepare<
       [string],
       { user_code: string; expires_at: number; approved: number }
-    >(
-      `SELECT user_code, expires_at, approved FROM device_codes WHERE user_code = ?`,
-    )
+    >(`SELECT user_code, expires_at, approved FROM device_codes WHERE user_code = ?`)
     .get(normalized);
   if (!row) return false;
   if (row.expires_at < Date.now()) {
