@@ -360,7 +360,7 @@ function SettingsView({
   const [gb, setGb] = useState(capacityGb);
   const [saved, setSaved] = useState(false);
 
-  const [coordinator, setCoordinator] = useState('http://localhost:4000');
+  const [coordinator, setCoordinator] = useState('https://api.scatter.tools');
   const [coordinatorInput, setCoordinatorInput] = useState('');
   const [editingCoordinator, setEditingCoordinator] = useState(false);
   const [coordinatorError, setCoordinatorError] = useState<string | null>(null);
@@ -466,7 +466,7 @@ function SettingsView({
                 if (e.key === 'Enter') saveCoordinator();
                 if (e.key === 'Escape') setEditingCoordinator(false);
               }}
-              placeholder="http://localhost:4000"
+              placeholder="https://api.scatter.tools"
               className="w-full px-3 py-2 border-2 border-scatter-border bg-scatter-bg font-mono text-sm mb-2 outline-none focus:bg-white"
             />
             <div className="flex gap-2">

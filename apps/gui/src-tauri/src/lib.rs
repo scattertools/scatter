@@ -22,7 +22,7 @@ use storage::ShardStorage;
 
 const VERSION: &str = "0.1.0";
 const DEFAULT_CAPACITY_BYTES: u64 = 50 * 1024 * 1024 * 1024; // 50 GB
-const DEFAULT_COORDINATOR: &str = "http://localhost:4000";
+const DEFAULT_COORDINATOR: &str = "https://api.scatter.tools";
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 // ---------------------------------------------------------------------------
@@ -463,9 +463,7 @@ async fn start_device_login(state: State<'_, Arc<AppState>>) -> Result<DeviceLog
 /// code. Returns `Some(account)` once the user approves in the browser, `None`
 /// while still pending, or an error when the code is invalid/expired.
 #[tauri::command]
-async fn poll_device_login(
-    state: State<'_, Arc<AppState>>,
-) -> Result<Option<Account>, String> {
+async fn poll_device_login(state: State<'_, Arc<AppState>>) -> Result<Option<Account>, String> {
     let device_code = state
         .pending_device_code
         .lock()
@@ -538,10 +536,7 @@ async fn poll_device_login(
 /// in the web account settings while signed in there) for a session, persist
 /// it, and load the account's credit balance.
 #[tauri::command]
-async fn login_with_code(
-    state: State<'_, Arc<AppState>>,
-    code: String,
-) -> Result<Account, String> {
+async fn login_with_code(state: State<'_, Arc<AppState>>, code: String) -> Result<Account, String> {
     let mut config = load_config();
     let client = reqwest::Client::new();
 
@@ -639,11 +634,7 @@ fn logout(state: State<Arc<AppState>>) -> Result<(), String> {
     Ok(())
 }
 
-async fn fetch_balance(
-    client: &reqwest::Client,
-    coordinator: &str,
-    session: &str,
-) -> Option<i64> {
+async fn fetch_balance(client: &reqwest::Client, coordinator: &str, session: &str) -> Option<i64> {
     let resp = client
         .get(format!("{coordinator}/credits"))
         .bearer_auth(session)
@@ -699,10 +690,9 @@ pub fn run() {
                                 user: VerifyUser,
                             }
                             if let Ok(me) = resp.json::<Me>().await {
-                                let balance =
-                                    fetch_balance(&client, &coordinator, &session)
-                                        .await
-                                        .unwrap_or(0);
+                                let balance = fetch_balance(&client, &coordinator, &session)
+                                    .await
+                                    .unwrap_or(0);
                                 *state_for_session.account.lock().unwrap() = Some(Account {
                                     email: me.user.email,
                                     username: me.user.username,
